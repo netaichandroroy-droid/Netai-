@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">Rafiqul Islam</string>
+    <string name="total_balance">Current Net Balance</string>
+    <string name="total_income">Total Income</string>
+    <string name="total_expense">Total Expense</string>
+    <string name="month_income">Monthly Income</string>
+    <string name="month_expense">Monthly Expense</string>
+    <string name="income_vs_expense">Income vs Expense</string>
+    <string name="download_picture">Download Report Image (PNG)</string>
+    <string name="accounts_summary">Accounts Summary</string>
+    <string name="settings_title">Settings &amp; Backup</string>
+    <string name="json_backup">JSON Backup</string>
+    <string name="restore_backup">Restore Backup</string>
+    <string name="picture_export">Download Report Image</string>
+    <string name="save_transaction">Save Transaction</string>
+    <string name="delete_confirm_title">Delete Transaction?</string>
+    <string name="delete_confirm_body">This transaction will be permanently deleted.</string>
+    <string name="delete_action">Delete</string>
+    <string name="cancel_action">Cancel</string>
+    <string name="login_depot_title">RANGPUR DEPOT</string>
+</resources>

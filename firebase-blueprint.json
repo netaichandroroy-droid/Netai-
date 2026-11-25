@@ -1,0 +1,242 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile storing username, email, PBKDF2-HMAC-SHA256 hashed password, and HTTPS profile picture URL.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the authenticated owner user."
+        },
+        "username": {
+          "type": "string",
+          "description": "Unique handle (3-30 chars: letters, digits, _, ., -)."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address."
+        },
+        "passwordHash": {
+          "type": "string",
+          "description": "Salted PBKDF2-HMAC-SHA256 password hash in pbkdf2_sha256$iterations$salt$hash format."
+        },
+        "profilePictureUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Optional HTTPS URL for the user's profile picture."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-generated creation timestamp via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-generated last update timestamp via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "username",
+        "email",
+        "passwordHash",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "HisabTransaction": {
+      "title": "HisabTransaction",
+      "description": "A personal income or expense transaction in the Bengali Personal Hisab Khata ledger.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the authenticated owner user."
+        },
+        "ownerScope": {
+          "type": "string",
+          "description": "Optional local scope identifier (local_rafiqul for Admin, member_<id> for Member)."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["income", "expense"],
+          "description": "Transaction type: income or expense."
+        },
+        "amount": {
+          "type": "number",
+          "description": "Positive transaction amount in BDT."
+        },
+        "category": {
+          "type": "string",
+          "description": "Category label in Bengali (e.g., খাবার, বেতন)."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional note or description for the transaction."
+        },
+        "date": {
+          "type": "string",
+          "description": "Transaction date formatted as YYYY-MM-DD."
+        },
+        "account": {
+          "type": "string",
+          "enum": ["cash", "bank"],
+          "description": "Account used: cash or bank."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-generated creation timestamp via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-generated last update timestamp via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "type",
+        "amount",
+        "category",
+        "note",
+        "date",
+        "account",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MemberSync": {
+      "title": "MemberSync",
+      "description": "Synced organization member record with hashed member login credentials and metadata.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "designation": { "type": "string" },
+        "phone": { "type": "string" },
+        "depot": { "type": "string" },
+        "code": { "type": "string" },
+        "area": { "type": "string" },
+        "active": { "type": "boolean" },
+        "clientCreatedAtMs": { "type": "number" },
+        "passwordHash": { "type": "string" },
+        "defaultPassword": { "type": "boolean" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "joiningDate": { "type": "string" },
+        "salesAmount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "active", "createdAt", "updatedAt"]
+    },
+    "MemberTakaJomaSync": {
+      "title": "MemberTakaJomaSync",
+      "description": "Synced member deposit submission (Taka Joma) with approval status.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "memberId": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "depot": { "type": "string" },
+        "designation": { "type": "string" },
+        "area": { "type": "string" },
+        "bankName": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "note": { "type": "string" },
+        "slipHash": { "type": "string" },
+        "submittedByRole": { "type": "string", "enum": ["ADMIN", "MEMBER"] },
+        "clientCreatedAtMs": { "type": "number" },
+        "approvalStatus": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "reviewedAtMs": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "memberId", "name", "amount", "date", "submittedByRole", "approvalStatus", "createdAt", "updatedAt"]
+    },
+    "MonthlySalesSync": {
+      "title": "MonthlySalesSync",
+      "description": "Synced monthly member sales record (TP sales and TP+VAT).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "yearMonth": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "tpSales": { "type": "number" },
+        "tpPlusVat": { "type": "number" },
+        "clientCreatedAtMs": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "yearMonth", "code", "name", "tpSales", "tpPlusVat", "createdAt", "updatedAt"]
+    },
+    "AppSyncConfig": {
+      "title": "AppSyncConfig",
+      "description": "Synced app configuration document (online_payment, member_app_link, admin_auth, drive_backup).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "onlinePaymentEnabled": { "type": "boolean" },
+        "accountsJson": { "type": "string" },
+        "downloadUrl": { "type": "string" },
+        "loginId": { "type": "string" },
+        "passwordHash": { "type": "string" },
+        "defaultPassword": { "type": "boolean" },
+        "driveConnected": { "type": "boolean" },
+        "driveEmail": { "type": "string" },
+        "driveFileId": { "type": "string" },
+        "driveAutoBackupEnabled": { "type": "boolean" },
+        "lastBackupAtMs": { "type": "number" },
+        "lastBackupSummary": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Owner-isolated user profile document."
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": {
+        "$ref": "#/entities/HisabTransaction"
+      },
+      "description": "User-scoped subcollection storing personal income and expense transactions."
+    },
+    "/users/{userId}/members/{memberId}": {
+      "schema": {
+        "$ref": "#/entities/MemberSync"
+      },
+      "description": "User-scoped subcollection storing organization members for cross-device auto-sync."
+    },
+    "/users/{userId}/takaJoma/{submissionId}": {
+      "schema": {
+        "$ref": "#/entities/MemberTakaJomaSync"
+      },
+      "description": "User-scoped subcollection storing member Taka Joma deposit submissions for cross-device auto-sync."
+    },
+    "/users/{userId}/monthlySales/{recordId}": {
+      "schema": {
+        "$ref": "#/entities/MonthlySalesSync"
+      },
+      "description": "User-scoped subcollection storing monthly member sales records for cross-device auto-sync."
+    },
+    "/users/{userId}/appConfig/{configId}": {
+      "schema": {
+        "$ref": "#/entities/AppSyncConfig"
+      },
+      "description": "User-scoped configuration documents (online_payment, member_app_link, admin_auth, drive_backup) for auto-sync."
+    }
+  }
+}
