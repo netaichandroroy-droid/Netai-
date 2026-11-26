@@ -72,6 +72,7 @@ fun MemberProfileScreen(
     onToggleAutoUpdate: (Boolean) -> Unit = {},
     onCheckAppUpdate: () -> Unit = {},
     onCompleteAppUpdate: () -> Unit = {},
+    onOpenAppUpdateLink: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -260,7 +261,8 @@ fun MemberProfileScreen(
                 updateState = appUpdateState,
                 onToggleAutoUpdate = onToggleAutoUpdate,
                 onCheckForUpdate = onCheckAppUpdate,
-                onCompleteUpdate = onCompleteAppUpdate
+                onCompleteUpdate = onCompleteAppUpdate,
+                onOpenUpdateLink = onOpenAppUpdateLink
             )
         }
     }

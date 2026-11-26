@@ -12,12 +12,22 @@ android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
+  val buildVersionCode = (
+    System.getenv("APP_VERSION_CODE")
+      ?: providers.gradleProperty("appVersionCode").orNull
+  )?.toIntOrNull()?.coerceAtLeast(1) ?: 2
+
+  val buildVersionName = (
+    System.getenv("APP_VERSION_NAME")
+      ?: providers.gradleProperty("appVersionName").orNull
+  )?.takeIf { it.isNotBlank() } ?: "1.1"
+
   defaultConfig {
     applicationId = "com.aistudio.hisabkhata.rkxmzp"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = buildVersionCode
+    versionName = buildVersionName
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

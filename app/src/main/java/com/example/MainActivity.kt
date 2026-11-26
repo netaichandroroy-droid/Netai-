@@ -156,7 +156,7 @@ fun AppContent(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            appUpdateController.unregisterListener()
+            appUpdateController.dispose()
         }
     }
 
@@ -180,7 +180,11 @@ fun AppContent(
     }
 
     val handleCompleteAppUpdate: () -> Unit = {
-        appUpdateController.completeUpdate()
+        appUpdateController.completeUpdate(activity = context.findActivity())
+    }
+
+    val handleOpenAppUpdateReleases: () -> Unit = {
+        appUpdateController.openReleasePage(activity = context.findActivity())
     }
 
     var currentUser by remember(firebaseAuth) {
@@ -357,6 +361,7 @@ fun AppContent(
                         onToggleAutoUpdate = handleToggleAutoUpdate,
                         onCheckAppUpdate = handleCheckAppUpdate,
                         onCompleteAppUpdate = handleCompleteAppUpdate,
+                        onOpenAppUpdateLink = handleOpenAppUpdateReleases,
                         openAiCallCenterSignal = openAiCallCenterSignal,
                         autoStartMondayCallsSignal = autoStartMondayCallsSignal
                     )
@@ -387,7 +392,8 @@ fun AppContent(
                             appUpdateState = appUpdateState,
                             onToggleAutoUpdate = handleToggleAutoUpdate,
                             onCheckAppUpdate = handleCheckAppUpdate,
-                            onCompleteAppUpdate = handleCompleteAppUpdate
+                            onCompleteAppUpdate = handleCompleteAppUpdate,
+                            onOpenAppUpdateLink = handleOpenAppUpdateReleases
                         )
                     }
                 }

@@ -7,6 +7,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -79,8 +82,45 @@ jobs:
             fi
           fi
 
+      - name: Compute App Version
+        run: |
+          VER_CODE=$((10 + GITHUB_RUN_NUMBER))
+          VER_NAME="1.0.${GITHUB_RUN_NUMBER}"
+          TAG_NAME="v${VER_NAME}-b${VER_CODE}"
+          echo "APP_VERSION_CODE=${VER_CODE}" >> "$GITHUB_ENV"
+          echo "APP_VERSION_NAME=${VER_NAME}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${TAG_NAME}" >> "$GITHUB_ENV"
+
       - name: Build Debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Prepare Release APK
+        run: |
+          APK_SOURCE=$(find app/build/outputs/apk/debug -maxdepth 1 -name "*.apk" | head -n 1)
+          if [ -z "$APK_SOURCE" ]; then
+            echo "Debug APK not found!"
+            exit 1
+          fi
+          mkdir -p release_assets
+          RELEASE_APK="release_assets/Rafiqul-Islam-v${APP_VERSION_NAME}-b${APP_VERSION_CODE}.apk"
+          cp "$APK_SOURCE" "$RELEASE_APK"
+          echo "RELEASE_APK=$RELEASE_APK" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          COMMIT_MSG=$(git log -1 --pretty=%s)
+          NOTES=$(printf "Build Code: %s\nVersion: %s\nCommit: %s (%s)\n\nDownload and install the attached APK to update your mobile app." "$APP_VERSION_CODE" "$APP_VERSION_NAME" "$COMMIT_MSG" "$SHORT_SHA")
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$RELEASE_APK" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$RELEASE_APK" \
+              --title "Rafiqul Islam v${APP_VERSION_NAME} (Build ${APP_VERSION_CODE})" \
+              --notes "$NOTES" \
+              --latest
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

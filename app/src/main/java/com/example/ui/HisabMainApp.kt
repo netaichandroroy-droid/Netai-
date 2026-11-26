@@ -163,6 +163,7 @@ fun HisabMainApp(
     onToggleAutoUpdate: (Boolean) -> Unit = {},
     onCheckAppUpdate: () -> Unit = {},
     onCompleteAppUpdate: () -> Unit = {},
+    onOpenAppUpdateLink: (() -> Unit)? = null,
     openAiCallCenterSignal: Int = 0,
     autoStartMondayCallsSignal: Int = 0
 ) {
@@ -1157,9 +1158,14 @@ fun HisabMainApp(
                                 onCheckAppUpdate = onCheckAppUpdate,
                                 onCompleteAppUpdate = onCompleteAppUpdate,
                                 onOpenAppUpdateLink = {
-                                    val url = MemberAppLinkStore.resolveDisplayUrl(memberAppDownloadUrl)
-                                    if (!MemberAppLinkStore.openUrlSafely(context, url)) {
-                                        viewModel.showMessage("Could not open app update link")
+                                    if (onOpenAppUpdateLink != null) {
+                                        onOpenAppUpdateLink()
+                                    } else {
+                                        val url = appUpdateState.releasePageUrl
+                                            .ifBlank { MemberAppLinkStore.resolveDisplayUrl(memberAppDownloadUrl) }
+                                        if (!MemberAppLinkStore.openUrlSafely(context, url)) {
+                                            viewModel.showMessage("Could not open app update link")
+                                        }
                                     }
                                 }
                             )

@@ -108,7 +108,8 @@ fun MemberMainApp(
     appUpdateState: AppUpdateUiState = AppUpdateUiState(),
     onToggleAutoUpdate: (Boolean) -> Unit = {},
     onCheckAppUpdate: () -> Unit = {},
-    onCompleteAppUpdate: () -> Unit = {}
+    onCompleteAppUpdate: () -> Unit = {},
+    onOpenAppUpdateLink: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val localStore = remember(context) { LocalTransactionStore(context) }
@@ -302,7 +303,8 @@ fun MemberMainApp(
                             appUpdateState = appUpdateState,
                             onToggleAutoUpdate = onToggleAutoUpdate,
                             onCheckAppUpdate = onCheckAppUpdate,
-                            onCompleteAppUpdate = onCompleteAppUpdate
+                            onCompleteAppUpdate = onCompleteAppUpdate,
+                            onOpenAppUpdateLink = onOpenAppUpdateLink
                         )
                     }
                 }
