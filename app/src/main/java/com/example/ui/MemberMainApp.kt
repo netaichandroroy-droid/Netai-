@@ -238,7 +238,7 @@ fun MemberMainApp(
                 if (useRail) {
                     NavigationRail(
                         modifier = Modifier.fillMaxHeight(),
-                        containerColor = Color(0xFF171024).copy(alpha = 0.80f)
+                        containerColor = Color(0xFF0A1324).copy(alpha = 0.92f)
                     ) {
                         MemberTab.entries.forEach { tab ->
                             val selected = selectedTab == tab
@@ -366,15 +366,14 @@ private fun MemberTopAppBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
                 .clickable(onClick = onProfileClick)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             MemberAvatarView(
                 name = member.name,
                 photoPath = member.profilePhotoPath,
-                size = 34.dp
+                size = 36.dp
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(

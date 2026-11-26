@@ -55,15 +55,28 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import com.example.model.OnlinePaymentAccount
 import com.example.model.OnlinePaymentConfig
 import com.example.model.PaymentChannel
 import com.example.model.TxType
+import com.example.ui.components.GlossyFormSectionHeader
+import com.example.ui.components.GlossyNeonIconOrb
 import com.example.ui.components.SectionPanelCard
-import com.example.ui.theme.DarkIncomeSurface
-import com.example.ui.theme.DarkIncomeText
+import com.example.ui.components.hisabFilterChipBorder
+import com.example.ui.components.hisabFilterChipColors
+import com.example.ui.components.hisabFormFieldColors
+import com.example.ui.theme.BrandHeroStart
+import com.example.ui.theme.CardSurfaceSolid
+import com.example.ui.theme.ExpenseCrimson
+import com.example.ui.theme.GlassTextPrimary
+import com.example.ui.theme.GlassTextSecondary
 import com.example.ui.theme.IncomeEmerald
 import com.example.ui.theme.IncomeSurface
+import com.example.ui.theme.NeonBlue
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonEmerald
+import com.example.ui.theme.NeonPurple
 
 @Composable
 fun OnlinePaymentScreen(
@@ -97,36 +110,34 @@ fun OnlinePaymentScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 6.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         if (isAdminEditable) {
             item {
-                SectionPanelCard(modifier = Modifier.fillMaxWidth()) {
+                SectionPanelCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    accentColor = NeonCyan,
+                    secondaryGlow = NeonBlue
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Payments,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        GlossyNeonIconOrb(
+                            icon = Icons.Outlined.Payments,
+                            contentDescription = null,
+                            glowColor = NeonCyan,
+                            size = 44.dp,
+                            iconSize = 22.dp
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = "Online Payment",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = GlassTextPrimary,
                             modifier = Modifier.weight(1f)
                         )
                         Switch(
@@ -140,19 +151,23 @@ fun OnlinePaymentScreen(
         }
 
         item {
-            SectionPanelCard(modifier = Modifier.fillMaxWidth()) {
+            SectionPanelCard(
+                modifier = Modifier.fillMaxWidth(),
+                accentColor = NeonEmerald,
+                secondaryGlow = NeonCyan
+            ) {
                 Text(
                     text = "Payment Methods",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = GlassTextPrimary
                 )
                 if (!isAdminEditable && (!config.isOnlinePaymentEnabled || displayedAccounts.isEmpty())) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "No online payment methods are currently enabled",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = GlassTextSecondary
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -172,26 +187,17 @@ fun OnlinePaymentScreen(
                             .testTag("payment_channel_row_${account.id}"),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(
-                                    if (account.isEnabled) activeBg else MaterialTheme.colorScheme.surfaceVariant
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (account.channel == PaymentChannel.BANK) {
-                                    Icons.Outlined.AccountBalance
-                                } else {
-                                    Icons.Outlined.Smartphone
-                                },
-                                contentDescription = null,
-                                tint = if (account.isEnabled) activeFg else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        GlossyNeonIconOrb(
+                            icon = if (account.channel == PaymentChannel.BANK) {
+                                Icons.Outlined.AccountBalance
+                            } else {
+                                Icons.Outlined.Smartphone
+                            },
+                            contentDescription = account.channel.title,
+                            glowColor = if (account.isEnabled) NeonEmerald else NeonBlue,
+                            size = 40.dp,
+                            iconSize = 20.dp
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Row(
@@ -283,29 +289,32 @@ fun OnlinePaymentScreen(
 
         if (config.isOnlinePaymentEnabled) {
             item {
-                SectionPanelCard(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Record Online Payment",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                SectionPanelCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    accentColor = NeonPurple,
+                    secondaryGlow = NeonCyan
+                ) {
+                    GlossyFormSectionHeader(
+                        icon = Icons.Outlined.Payments,
+                        title = "Record Online Payment",
+                        subtitle = "${selectedChannel.title} • ${if (paymentTxType == TxType.INCOME) "Receive" else "Send"}",
+                        glowColor = if (paymentTxType == TxType.INCOME) NeonEmerald else NeonPurple
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         PaymentChannel.entries.forEach { channel ->
+                            val isSelected = selectedChannel == channel
                             FilterChip(
-                                selected = selectedChannel == channel,
+                                selected = isSelected,
                                 onClick = { selectedChannel = channel },
                                 label = { Text(channel.title) },
                                 modifier = Modifier.weight(1f),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.primary
-                                )
+                                colors = hisabFilterChipColors(accentColor = NeonCyan),
+                                border = hisabFilterChipBorder(selected = isSelected, accentColor = NeonCyan)
                             )
                         }
                     }
@@ -320,12 +329,22 @@ fun OnlinePaymentScreen(
                             selected = paymentTxType == TxType.INCOME,
                             onClick = { paymentTxType = TxType.INCOME },
                             label = { Text("Receive (Income)") },
+                            colors = hisabFilterChipColors(accentColor = NeonEmerald),
+                            border = hisabFilterChipBorder(
+                                selected = paymentTxType == TxType.INCOME,
+                                accentColor = NeonEmerald
+                            ),
                             modifier = Modifier.weight(1f)
                         )
                         FilterChip(
                             selected = paymentTxType == TxType.EXPENSE,
                             onClick = { paymentTxType = TxType.EXPENSE },
                             label = { Text("Send (Expense)") },
+                            colors = hisabFilterChipColors(accentColor = ExpenseCrimson),
+                            border = hisabFilterChipBorder(
+                                selected = paymentTxType == TxType.EXPENSE,
+                                accentColor = ExpenseCrimson
+                            ),
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -342,6 +361,7 @@ fun OnlinePaymentScreen(
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         shape = RoundedCornerShape(12.dp),
+                        colors = hisabFormFieldColors(accentColor = NeonCyan),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("online_payment_amount_input")
@@ -355,6 +375,7 @@ fun OnlinePaymentScreen(
                         label = { Text("Reference / Note (Optional)") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
+                        colors = hisabFormFieldColors(accentColor = NeonCyan),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("online_payment_note_input")
@@ -365,7 +386,7 @@ fun OnlinePaymentScreen(
                         Text(
                             text = formError ?: "",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
+                            color = ExpenseCrimson
                         )
                     }
 
@@ -390,13 +411,17 @@ fun OnlinePaymentScreen(
                                 }
                             }
                         },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = BrandHeroStart,
+                            contentColor = Color.White
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(50.dp)
                             .testTag("record_online_payment_button")
                     ) {
-                        Text("Save Transaction")
+                        Text("Save Transaction", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -428,6 +453,9 @@ private fun EditPaymentAccountDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = CardSurfaceSolid,
+        titleContentColor = GlassTextPrimary,
+        textContentColor = GlassTextSecondary,
         title = { Text(account.channel.title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -449,6 +477,7 @@ private fun EditPaymentAccountDialog(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     shape = RoundedCornerShape(12.dp),
+                    colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -466,6 +495,7 @@ private fun EditPaymentAccountDialog(
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
+                    colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier.fillMaxWidth()
                 )
 

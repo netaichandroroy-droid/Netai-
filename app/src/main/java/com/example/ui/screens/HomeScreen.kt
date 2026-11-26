@@ -33,15 +33,17 @@ import com.example.model.TxType
 import com.example.ui.LocalHisabViewModel
 import com.example.ui.components.AdminMemberTakaJomaTableCard
 import com.example.ui.components.DepositsSalesNetBalanceCard
+import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.HeroBalanceCard
 import com.example.ui.components.MemberSalesDuesCard
 import com.example.ui.components.SectionPanelCard
+import com.example.ui.theme.ExpenseCrimson
 import com.example.ui.theme.ExpenseCrimsonDark
-import com.example.ui.theme.ExpenseSurface
 import com.example.ui.theme.IncomeEmeraldDark
-import com.example.ui.theme.IncomeSurface
 import com.example.ui.theme.NagadAccent
-import com.example.ui.theme.NagadSurface
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonEmerald
+import com.example.ui.theme.NeonGold
 
 @Composable
 fun HomeScreen(
@@ -96,16 +98,14 @@ fun HomeScreen(
         pendingMemberJomaList.sumOf { it.amount }
     }
 
-    val incomeSurface = IncomeSurface
     val incomeText = IncomeEmeraldDark
-    val expenseSurface = ExpenseSurface
     val expenseText = ExpenseCrimsonDark
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 6.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         item {
             DepositsSalesNetBalanceCard(
@@ -125,29 +125,33 @@ fun HomeScreen(
 
         // Today's BDT (৳) Income & Expense summary card
         item {
-            SectionPanelCard(modifier = Modifier.fillMaxWidth()) {
+            SectionPanelCard(
+                modifier = Modifier.fillMaxWidth(),
+                accentColor = NeonCyan,
+                secondaryGlow = NeonGold
+            ) {
                 Text(
                     text = "Today's Summary (${BanglaFormatters.formatBanglaDate(todayIso)})",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(7.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
-                    Surface(
+                    GlossyInnerMetricTile(
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        color = incomeSurface
+                        accentColor = NeonEmerald,
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                             Text(
                                 text = "Today's Income",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = incomeText
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = BanglaFormatters.formatBdt(todayIncome),
                                 style = MaterialTheme.typography.titleMedium,
@@ -157,18 +161,18 @@ fun HomeScreen(
                         }
                     }
 
-                    Surface(
+                    GlossyInnerMetricTile(
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        color = expenseSurface
+                        accentColor = ExpenseCrimson,
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                             Text(
                                 text = "Today's Expense",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = expenseText
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = BanglaFormatters.formatBdt(todayExpense),
                                 style = MaterialTheme.typography.titleMedium,
@@ -179,19 +183,19 @@ fun HomeScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(7.dp))
 
-                Surface(
+                GlossyInnerMetricTile(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("today_approved_member_joma_banner"),
-                    shape = RoundedCornerShape(12.dp),
-                    color = incomeSurface.copy(alpha = 0.72f)
+                    accentColor = NeonEmerald,
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -212,18 +216,18 @@ fun HomeScreen(
                 }
 
                 if (pendingMemberJomaList.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Surface(
+                    Spacer(modifier = Modifier.height(5.dp))
+                    GlossyInnerMetricTile(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("today_pending_member_joma_banner"),
-                        shape = RoundedCornerShape(12.dp),
-                        color = NagadSurface.copy(alpha = 0.85f)
+                        accentColor = NeonGold,
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {

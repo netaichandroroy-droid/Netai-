@@ -104,7 +104,14 @@ import com.example.model.MemberTakaJoma
 import com.example.model.PaymentMethodCategory
 import com.example.model.TakaJomaStatus
 import com.example.ui.components.DepositSlipAttachmentPreview
+import com.example.ui.components.GlossyFormSectionHeader
+import com.example.ui.components.GlossyInnerMetricTile
+import com.example.ui.components.GlossyNeonIconOrb
 import com.example.ui.components.TakaJomaStatusPill
+import com.example.ui.components.glossyMetallicSurface
+import com.example.ui.components.hisabFilterChipBorder
+import com.example.ui.components.hisabFilterChipColors
+import com.example.ui.components.hisabFormFieldColors
 import com.example.ui.theme.BkashAccent
 import com.example.ui.theme.BkashSurface
 import com.example.ui.theme.CardBorderSolid
@@ -116,16 +123,20 @@ import com.example.ui.theme.GlassTextSecondary
 import com.example.ui.theme.HeroCardBorderSolid
 import com.example.ui.theme.IncomeEmerald
 import com.example.ui.theme.IncomeSurface
+import com.example.ui.theme.MetallicSilverRim
 import com.example.ui.theme.NagadAccent
 import com.example.ui.theme.NagadSurface
+import com.example.ui.theme.NeonBlue
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonEmerald
+import com.example.ui.theme.NeonPurple
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
-
-private val Depth3DBaseColor = Color(0xFF0C0716)
-private val Depth3DInnerLipColor = Color(0xFF120C22)
-private val Depth3DTopSpecular = Color(0xFF7B63B8)
 
 @Composable
 fun MemberTakaJomaScreen(
@@ -287,48 +298,44 @@ fun MemberTakaJomaScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 8.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        // 3D Tactile Deposit Form Card
+        // Glossy Metallic Deposit Form Card
         item {
             TakaJoma3DPanelCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("taka_joma_3d_form_card"),
-                containerColor = CardSurfaceSolid,
-                borderColor = CardBorderSolid,
-                depthOffset = 7.dp
+                accentColor = NeonCyan,
+                secondaryGlow = NeonEmerald,
+                isHero = true
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Deposit Details",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = GlassTextPrimary
-                    )
-                    if (currentMember != null || selectedMemberId.isNotBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = IncomeSurface,
-                            border = BorderStroke(1.dp, IncomeEmerald.copy(alpha = 0.45f)),
-                            shadowElevation = 3.dp
-                        ) {
-                            Text(
-                                text = "Auto-filled",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = IncomeEmerald,
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                            )
+                GlossyFormSectionHeader(
+                    icon = Icons.Outlined.Payments,
+                    title = "Deposit Details",
+                    subtitle = if (isAdminMode) "Admin Deposit Entry" else "Submit Slip & Amount",
+                    glowColor = NeonEmerald,
+                    trailing = if (currentMember != null || selectedMemberId.isNotBlank()) {
+                        {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = IncomeSurface,
+                                border = BorderStroke(1.dp, IncomeEmerald.copy(alpha = 0.65f)),
+                                shadowElevation = 3.dp
+                            ) {
+                                Text(
+                                    text = "Auto-filled",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = IncomeEmerald,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                )
+                            }
                         }
-                    }
-                }
+                    } else null
+                )
 
                 if (isAdminMode && adminMembers.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(10.dp))
@@ -354,10 +361,8 @@ fun MemberTakaJomaScreen(
                                 selected = isSelected,
                                 onClick = { applyMemberAutoFill(member) },
                                 label = { Text(chipLabel) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.primary
-                                ),
+                                colors = hisabFilterChipColors(accentColor = NeonCyan),
+                                border = hisabFilterChipBorder(selected = isSelected, accentColor = NeonCyan),
                                 modifier = Modifier.testTag("taka_joma_member_chip_${member.id}")
                             )
                         }
@@ -627,113 +632,88 @@ fun MemberTakaJomaScreen(
                     else -> MaterialTheme.colorScheme.primaryContainer
                 }
 
-                // 3D Dropdown Anchor Field
-                Box(modifier = Modifier.fillMaxWidth().padding(bottom = 3.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .offset(y = 3.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Depth3DInnerLipColor)
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = CardInnerTileSolid,
-                        border = BorderStroke(
-                            width = if (dropdownExpanded || selectedBank.isNotBlank()) 1.5.dp else 1.dp,
-                            color = if (dropdownExpanded) {
-                                MaterialTheme.colorScheme.primary
-                            } else if (selectedBank.isNotBlank()) {
-                                dropdownAccent
-                            } else {
-                                HeroCardBorderSolid
-                            }
-                        ),
-                        shadowElevation = 4.dp,
+                // Glossy Dropdown Anchor Field
+                val anchorAccent = when {
+                    dropdownExpanded -> NeonCyan
+                    selectedBank.isNotBlank() -> dropdownAccent
+                    else -> NeonCyan
+                }
+                GlossyInnerMetricTile(
+                    accentColor = anchorAccent,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minimumInteractiveComponentSize()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { dropdownExpanded = !dropdownExpanded }
+                        .testTag("taka_joma_payment_dropdown")
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .minimumInteractiveComponentSize()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { dropdownExpanded = !dropdownExpanded }
-                            .testTag("taka_joma_payment_dropdown")
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(RoundedCornerShape(9.dp))
-                                    .background(
-                                        if (selectedBank.isNotBlank()) dropdownBadgeBg
-                                        else MaterialTheme.colorScheme.primaryContainer
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = dropdownIcon,
-                                    contentDescription = "Payment method",
-                                    tint = if (selectedBank.isNotBlank()) dropdownAccent else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                        GlossyNeonIconOrb(
+                            icon = dropdownIcon,
+                            contentDescription = "Payment method",
+                            glowColor = if (selectedBank.isNotBlank()) dropdownAccent else NeonCyan,
+                            size = 38.dp,
+                            iconSize = 19.dp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = selectedBank.ifBlank { "Select Cash, Nagad, bKash or Bank" },
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (selectedBank.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (selectedBank.isNotBlank()) {
+                                    GlassTextPrimary
+                                } else {
+                                    GlassTextSecondary
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            val methodSub = when (selectedBankItem?.category) {
+                                PaymentMethodCategory.CASH -> "Cash"
+                                PaymentMethodCategory.MFS -> "${selectedBankItem.enName} • Mobile Banking"
+                                PaymentMethodCategory.BANK -> "${selectedBankItem.enName} • ${selectedBankItem.shortCode}"
+                                null -> ""
                             }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
+                            if (methodSub.isNotBlank()) {
                                 Text(
-                                    text = selectedBank.ifBlank { "Select Cash, Nagad, bKash or Bank" },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (selectedBank.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (selectedBank.isNotBlank()) {
-                                        GlassTextPrimary
-                                    } else {
-                                        GlassTextSecondary
-                                    },
+                                    text = methodSub,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = GlassTextSecondary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                val methodSub = when (selectedBankItem?.category) {
-                                    PaymentMethodCategory.CASH -> "Cash"
-                                    PaymentMethodCategory.MFS -> "${selectedBankItem.enName} • Mobile Banking"
-                                    PaymentMethodCategory.BANK -> "${selectedBankItem.enName} • ${selectedBankItem.shortCode}"
-                                    null -> ""
-                                }
-                                if (methodSub.isNotBlank()) {
-                                    Text(
-                                        text = methodSub,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = GlassTextSecondary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
                             }
-                            if (selectedBank.isNotBlank()) {
-                                IconButton(
-                                    onClick = { selectedBank = "" },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Close,
-                                        contentDescription = "Clear selection",
-                                        tint = GlassTextSecondary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                            Icon(
-                                imageVector = if (dropdownExpanded) {
-                                    Icons.Outlined.KeyboardArrowUp
-                                } else {
-                                    Icons.Outlined.KeyboardArrowDown
-                                },
-                                contentDescription = if (dropdownExpanded) "Collapse dropdown" else "Expand dropdown",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
                         }
+                        if (selectedBank.isNotBlank()) {
+                            IconButton(
+                                onClick = { selectedBank = "" },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = "Clear selection",
+                                    tint = GlassTextSecondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = if (dropdownExpanded) {
+                                Icons.Outlined.KeyboardArrowUp
+                            } else {
+                                Icons.Outlined.KeyboardArrowDown
+                            },
+                            contentDescription = if (dropdownExpanded) "Collapse dropdown" else "Expand dropdown",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
                 }
 
@@ -742,14 +722,12 @@ fun MemberTakaJomaScreen(
                     enter = expandVertically(),
                     exit = shrinkVertically()
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = CardInnerTileSolid,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
-                        shadowElevation = 6.dp,
+                    GlossyInnerMetricTile(
+                        accentColor = NeonCyan,
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 6.dp)
+                            .padding(top = 8.dp)
                             .testTag("taka_joma_dropdown_menu")
                     ) {
                         Column(
@@ -762,50 +740,46 @@ fun MemberTakaJomaScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 item {
+                                    val isAll = selectedCategoryFilter == null
                                     FilterChip(
-                                        selected = selectedCategoryFilter == null,
+                                        selected = isAll,
                                         onClick = { selectedCategoryFilter = null },
                                         label = { Text("All (${BangladeshBankDirectory.ALL_PAYMENT_METHODS.size})") },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                            selectedLabelColor = MaterialTheme.colorScheme.primary
-                                        ),
+                                        colors = hisabFilterChipColors(accentColor = NeonCyan),
+                                        border = hisabFilterChipBorder(selected = isAll, accentColor = NeonCyan),
                                         modifier = Modifier.testTag("dropdown_filter_all")
                                     )
                                 }
                                 item {
+                                    val isCash = selectedCategoryFilter == PaymentMethodCategory.CASH
                                     FilterChip(
-                                        selected = selectedCategoryFilter == PaymentMethodCategory.CASH,
+                                        selected = isCash,
                                         onClick = { selectedCategoryFilter = PaymentMethodCategory.CASH },
                                         label = { Text("Cash") },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = IncomeSurface,
-                                            selectedLabelColor = IncomeEmerald
-                                        ),
+                                        colors = hisabFilterChipColors(accentColor = IncomeEmerald),
+                                        border = hisabFilterChipBorder(selected = isCash, accentColor = IncomeEmerald),
                                         modifier = Modifier.testTag("dropdown_filter_cash")
                                     )
                                 }
                                 item {
+                                    val isMfs = selectedCategoryFilter == PaymentMethodCategory.MFS
                                     FilterChip(
-                                        selected = selectedCategoryFilter == PaymentMethodCategory.MFS,
+                                        selected = isMfs,
                                         onClick = { selectedCategoryFilter = PaymentMethodCategory.MFS },
                                         label = { Text("Nagad / bKash") },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = BkashSurface,
-                                            selectedLabelColor = BkashAccent
-                                        ),
+                                        colors = hisabFilterChipColors(accentColor = BkashAccent),
+                                        border = hisabFilterChipBorder(selected = isMfs, accentColor = BkashAccent),
                                         modifier = Modifier.testTag("dropdown_filter_mfs")
                                     )
                                 }
                                 item {
+                                    val isBank = selectedCategoryFilter == PaymentMethodCategory.BANK
                                     FilterChip(
-                                        selected = selectedCategoryFilter == PaymentMethodCategory.BANK,
+                                        selected = isBank,
                                         onClick = { selectedCategoryFilter = PaymentMethodCategory.BANK },
                                         label = { Text("All Bank") },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                            selectedLabelColor = MaterialTheme.colorScheme.primary
-                                        ),
+                                        colors = hisabFilterChipColors(accentColor = NeonBlue),
+                                        border = hisabFilterChipBorder(selected = isBank, accentColor = NeonBlue),
                                         modifier = Modifier.testTag("dropdown_filter_bank")
                                     )
                                 }
@@ -848,7 +822,7 @@ fun MemberTakaJomaScreen(
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = CardSurfaceSolid,
-                                border = BorderStroke(0.75.dp, CardBorderSolid),
+                                border = BorderStroke(0.9.dp, MetallicSilverRim.copy(alpha = 0.30f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(240.dp)
@@ -862,13 +836,7 @@ fun MemberTakaJomaScreen(
                                             "CASH" -> IncomeEmerald
                                             "NAGAD" -> NagadAccent
                                             "BKASH" -> BkashAccent
-                                            else -> MaterialTheme.colorScheme.primary
-                                        }
-                                        val itemSurface = when (item.shortCode) {
-                                            "CASH" -> IncomeSurface
-                                            "NAGAD" -> NagadSurface
-                                            "BKASH" -> BkashSurface
-                                            else -> MaterialTheme.colorScheme.primaryContainer
+                                            else -> NeonCyan
                                         }
                                         val itemIcon = when (item.category) {
                                             PaymentMethodCategory.CASH -> Icons.Outlined.Payments
@@ -887,7 +855,7 @@ fun MemberTakaJomaScreen(
                                                 .minimumInteractiveComponentSize()
                                                 .background(
                                                     if (isSelected) {
-                                                        itemSurface.copy(alpha = 0.65f)
+                                                        itemAccent.copy(alpha = 0.16f)
                                                     } else {
                                                         Color.Transparent
                                                     }
@@ -901,20 +869,13 @@ fun MemberTakaJomaScreen(
                                                 .testTag("bank_row_${item.shortCode}"),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(34.dp)
-                                                    .clip(RoundedCornerShape(9.dp))
-                                                    .background(if (isSelected) itemAccent else itemSurface),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = itemIcon,
-                                                    contentDescription = item.bnName,
-                                                    tint = if (isSelected) Color.White else itemAccent,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
+                                            GlossyNeonIconOrb(
+                                                icon = itemIcon,
+                                                contentDescription = item.bnName,
+                                                glowColor = itemAccent,
+                                                size = 34.dp,
+                                                iconSize = 17.dp
+                                            )
                                             Spacer(modifier = Modifier.width(10.dp))
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
@@ -950,7 +911,7 @@ fun MemberTakaJomaScreen(
                                         }
                                         HorizontalDivider(
                                             thickness = 0.75.dp,
-                                            color = CardBorderSolid
+                                            color = MetallicSilverRim.copy(alpha = 0.18f)
                                         )
                                     }
 
@@ -972,14 +933,14 @@ fun MemberTakaJomaScreen(
                                                 Icon(
                                                     imageVector = Icons.Outlined.AccountBalance,
                                                     contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary
+                                                    tint = NeonCyan
                                                 )
                                                 Spacer(modifier = Modifier.width(10.dp))
                                                 Text(
                                                     text = "Use \"$customBank\" as payment method",
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = MaterialTheme.colorScheme.primary
+                                                    color = NeonCyan
                                                 )
                                             }
                                         }
@@ -1196,33 +1157,33 @@ fun MemberTakaJomaScreen(
             }
         }
 
-        // 3D Submitted Deposits List Card
+        // Glossy Submitted Deposits List Card
         item {
             TakaJoma3DPanelCard(
                 modifier = Modifier.fillMaxWidth(),
-                containerColor = CardSurfaceSolid,
-                borderColor = CardBorderSolid,
-                depthOffset = 5.dp
+                accentColor = NeonBlue,
+                secondaryGlow = NeonPurple,
+                isHero = false
             ) {
-                Text(
-                    text = "Submitted Deposits",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = GlassTextPrimary
+                GlossyFormSectionHeader(
+                    icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                    title = "Submitted Deposits",
+                    subtitle = "${submissions.size} record(s)",
+                    glowColor = NeonBlue
                 )
 
                 if (submissions.isEmpty()) {
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "No deposit records saved yet.",
                         style = MaterialTheme.typography.bodySmall,
                         color = GlassTextSecondary
                     )
                 } else {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     HorizontalDivider(
-                        thickness = 1.dp,
-                        color = CardBorderSolid
+                        thickness = 0.8.dp,
+                        color = MetallicSilverRim.copy(alpha = 0.22f)
                     )
                     submissions.forEachIndexed { index, entry ->
                         TakaJomaListRow(
@@ -1233,8 +1194,8 @@ fun MemberTakaJomaScreen(
                         )
                         if (index < submissions.lastIndex) {
                             HorizontalDivider(
-                                thickness = 1.dp,
-                                color = CardBorderSolid
+                                thickness = 0.8.dp,
+                                color = MetallicSilverRim.copy(alpha = 0.18f)
                             )
                         }
                     }
@@ -1246,6 +1207,9 @@ fun MemberTakaJomaScreen(
     previewSubmission?.let { item ->
         AlertDialog(
             onDismissRequest = { previewSubmission = null },
+            containerColor = CardSurfaceSolid,
+            titleContentColor = GlassTextPrimary,
+            textContentColor = GlassTextSecondary,
             title = { Text("${item.name} • ${BanglaFormatters.formatBdt(item.amount)}") },
             text = {
                 Column(
@@ -1260,7 +1224,7 @@ fun MemberTakaJomaScreen(
                         Text(
                             text = "Status:",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = GlassTextSecondary
                         )
                         TakaJomaStatusPill(status = item.resolvedStatus)
                     }
@@ -1298,6 +1262,9 @@ fun MemberTakaJomaScreen(
         deletingSubmission?.let { item ->
             AlertDialog(
                 onDismissRequest = { deletingSubmission = null },
+                containerColor = CardSurfaceSolid,
+                titleContentColor = GlassTextPrimary,
+                textContentColor = GlassTextSecondary,
                 title = { Text("Delete Deposit Record?") },
                 text = {
                     Text("${item.name} (Code: ${item.code}) — ${BanglaFormatters.formatBdt(item.amount)} will be deleted.")
@@ -1308,7 +1275,7 @@ fun MemberTakaJomaScreen(
                             onDeleteSubmission(item)
                             deletingSubmission = null
                         },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        colors = ButtonDefaults.textButtonColors(contentColor = ExpenseCrimson)
                     ) {
                         Text("Delete")
                     }
@@ -1326,51 +1293,29 @@ fun MemberTakaJomaScreen(
 @Composable
 private fun TakaJoma3DPanelCard(
     modifier: Modifier = Modifier,
-    containerColor: Color = CardSurfaceSolid,
-    borderColor: Color = CardBorderSolid,
-    depthOffset: Dp = 6.dp,
+    accentColor: Color = NeonCyan,
+    secondaryGlow: Color = NeonEmerald,
+    isHero: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = modifier
-            .padding(horizontal = 12.dp)
-            .padding(bottom = depthOffset)
+            .padding(horizontal = 10.dp)
+            .glossyMetallicSurface(
+                shape = cardShape,
+                accentColor = accentColor,
+                secondaryGlow = secondaryGlow,
+                borderWidth = 1.5.dp,
+                isHero = isHero
+            )
     ) {
-        // 3D Extruded Bottom Slab
-        Box(
+        Column(
             modifier = Modifier
-                .matchParentSize()
-                .offset(y = depthOffset)
-                .clip(RoundedCornerShape(20.dp))
-                .background(Depth3DBaseColor)
-                .border(1.dp, borderColor.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            content = content
         )
-        // Raised Solid Front Card Face
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            color = containerColor,
-            border = BorderStroke(1.2.dp, borderColor),
-            shadowElevation = 14.dp
-        ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                // Crisp Top-Edge 3D Bevel Specular Highlight
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .padding(horizontal = 18.dp)
-                        .background(Depth3DTopSpecular.copy(alpha = 0.55f))
-                        .align(Alignment.TopCenter)
-                )
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                    content = content
-                )
-            }
-        }
     }
 }
 
@@ -1379,32 +1324,13 @@ private fun TakaJoma3DFieldShell(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    Box(modifier = modifier.padding(bottom = 3.dp)) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .offset(y = 3.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Depth3DInnerLipColor)
-        )
+    Box(modifier = modifier) {
         content()
     }
 }
 
 @Composable
-private fun takaJoma3DTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = CardInnerTileSolid,
-    unfocusedContainerColor = CardInnerTileSolid,
-    focusedBorderColor = Depth3DTopSpecular,
-    unfocusedBorderColor = HeroCardBorderSolid,
-    focusedTextColor = GlassTextPrimary,
-    unfocusedTextColor = GlassTextPrimary,
-    focusedLabelColor = MaterialTheme.colorScheme.primary,
-    unfocusedLabelColor = GlassTextSecondary,
-    focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
-    unfocusedLeadingIconColor = GlassTextSecondary,
-    cursorColor = MaterialTheme.colorScheme.primary
-)
+private fun takaJoma3DTextFieldColors() = hisabFormFieldColors(accentColor = NeonCyan)
 
 @Composable
 private fun TakaJoma3DPhotoUploadSection(
@@ -1415,137 +1341,113 @@ private fun TakaJoma3DPhotoUploadSection(
     onCaptureFromCamera: () -> Unit,
     onRemovePhoto: () -> Unit
 ) {
-    Box(
+    val hasPhoto = photoPath.isNotBlank()
+    GlossyInnerMetricTile(
+        accentColor = if (hasPhoto) NeonEmerald else NeonCyan,
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 4.dp)
             .testTag("taka_joma_photo_upload_section")
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .matchParentSize()
-                .offset(y = 4.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Depth3DInnerLipColor)
-        )
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            color = CardInnerTileSolid,
-            border = BorderStroke(
-                width = 1.2.dp,
-                color = if (photoPath.isNotBlank()) IncomeEmerald.copy(alpha = 0.7f) else HeroCardBorderSolid
-            ),
-            shadowElevation = 4.dp
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(
-                                    if (photoPath.isNotBlank()) IncomeSurface else MaterialTheme.colorScheme.primaryContainer
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.PhotoCamera,
-                                contentDescription = null,
-                                tint = if (photoPath.isNotBlank()) IncomeEmerald else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Deposit Slip Photo (Optional)",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = GlassTextPrimary
-                            )
-                            Text(
-                                text = if (photoPath.isNotBlank()) {
-                                    "Slip photo attached — tap preview to zoom"
-                                } else {
-                                    "Attach bank slip, bKash/Nagad screenshot or photo"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = GlassTextSecondary
-                            )
-                        }
-                    }
-                    if (isProcessing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
+                    GlossyNeonIconOrb(
+                        icon = Icons.Outlined.PhotoCamera,
+                        contentDescription = null,
+                        glowColor = if (hasPhoto) NeonEmerald else NeonCyan,
+                        size = 36.dp,
+                        iconSize = 18.dp
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Deposit Slip Photo (Optional)",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = GlassTextPrimary
+                        )
+                        Text(
+                            text = if (hasPhoto) {
+                                "Slip photo attached — tap preview to zoom"
+                            } else {
+                                "Attach bank slip, bKash/Nagad screenshot or photo"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GlassTextSecondary
                         )
                     }
                 }
-
-                if (photoPath.isNotBlank()) {
-                    DepositSlipAttachmentPreview(
-                        photoPath = photoPath,
-                        slipHash = slipHash,
-                        title = "Selected Deposit Slip"
+                if (isProcessing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = NeonCyan
                     )
                 }
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+            if (hasPhoto) {
+                DepositSlipAttachmentPreview(
+                    photoPath = photoPath,
+                    slipHash = slipHash,
+                    title = "Selected Deposit Slip"
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TakaJoma3DActionChipButton(
+                    label = if (hasPhoto) "Change Photo" else "Gallery Photo",
+                    icon = Icons.Outlined.AddPhotoAlternate,
+                    containerColor = NeonCyan.copy(alpha = 0.16f),
+                    baseColor = Color(0xFF0A2A42),
+                    contentColor = NeonCyan,
+                    enabled = !isProcessing,
+                    onClick = onPickFromGallery,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("taka_joma_pick_photo_button")
+                )
+
+                TakaJoma3DActionChipButton(
+                    label = "Camera",
+                    icon = Icons.Outlined.CameraAlt,
+                    containerColor = CardSurfaceSolid,
+                    baseColor = Color(0xFF07101F),
+                    contentColor = GlassTextPrimary,
+                    enabled = !isProcessing,
+                    onClick = onCaptureFromCamera,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("taka_joma_camera_button")
+                )
+
+                if (hasPhoto) {
                     TakaJoma3DActionChipButton(
-                        label = if (photoPath.isNotBlank()) "Change Photo" else "Gallery Photo",
-                        icon = Icons.Outlined.AddPhotoAlternate,
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        baseColor = Color(0xFF1E2D5A),
-                        contentColor = MaterialTheme.colorScheme.primary,
+                        label = "Remove",
+                        icon = Icons.Outlined.DeleteOutline,
+                        containerColor = ExpenseCrimson.copy(alpha = 0.16f),
+                        baseColor = Color(0xFF3E101C),
+                        contentColor = ExpenseCrimson,
                         enabled = !isProcessing,
-                        onClick = onPickFromGallery,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("taka_joma_pick_photo_button")
+                        onClick = onRemovePhoto,
+                        modifier = Modifier.testTag("taka_joma_remove_photo_button")
                     )
-
-                    TakaJoma3DActionChipButton(
-                        label = "Camera",
-                        icon = Icons.Outlined.CameraAlt,
-                        containerColor = CardSurfaceSolid,
-                        baseColor = Depth3DBaseColor,
-                        contentColor = GlassTextPrimary,
-                        enabled = !isProcessing,
-                        onClick = onCaptureFromCamera,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("taka_joma_camera_button")
-                    )
-
-                    if (photoPath.isNotBlank()) {
-                        TakaJoma3DActionChipButton(
-                            label = "Remove",
-                            icon = Icons.Outlined.DeleteOutline,
-                            containerColor = ExpenseCrimson.copy(alpha = 0.16f),
-                            baseColor = Color(0xFF5A1624),
-                            contentColor = ExpenseCrimson,
-                            enabled = !isProcessing,
-                            onClick = onRemovePhoto,
-                            modifier = Modifier.testTag("taka_joma_remove_photo_button")
-                        )
-                    }
                 }
             }
         }
@@ -1566,29 +1468,29 @@ private fun TakaJoma3DActionChipButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressOffset by animateDpAsState(
-        targetValue = if (isPressed && enabled) 2.5.dp else 0.dp,
+        targetValue = if (isPressed && enabled) 2.dp else 0.dp,
         animationSpec = spring(stiffness = 700f),
-        label = "chip_3d_press"
+        label = "chip_glossy_press"
     )
 
-    Box(modifier = modifier.padding(bottom = 3.dp)) {
+    Box(modifier = modifier.padding(bottom = 2.dp)) {
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .offset(y = 3.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .offset(y = 2.dp)
+                .clip(RoundedCornerShape(12.dp))
                 .background(baseColor)
         )
         Surface(
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(12.dp),
             color = containerColor,
-            border = BorderStroke(1.dp, contentColor.copy(alpha = 0.4f)),
+            border = BorderStroke(1.1.dp, contentColor.copy(alpha = 0.55f)),
             shadowElevation = if (isPressed) 1.dp else 4.dp,
             modifier = Modifier
                 .fillMaxWidth()
                 .offset(y = pressOffset)
                 .minimumInteractiveComponentSize()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .clickable(
                     interactionSource = interactionSource,
                     indication = androidx.compose.material3.ripple(),
@@ -1630,46 +1532,74 @@ private fun TakaJoma3DSubmitButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressOffset by animateDpAsState(
-        targetValue = if (isPressed && enabled) 4.dp else 0.dp,
+        targetValue = if (isPressed && enabled) 3.dp else 0.dp,
         animationSpec = spring(stiffness = 750f),
-        label = "submit_3d_press"
+        label = "submit_glossy_press"
     )
 
-    val topFaceColor = if (enabled) IncomeEmerald else IncomeEmerald.copy(alpha = 0.55f)
-    val baseExtrusionColor = Color(0xFF0A5C41)
-
+    val buttonShape = RoundedCornerShape(15.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 5.dp)
+            .padding(bottom = 4.dp)
     ) {
-        // 3D Extruded Bottom Lip
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp)
-                .offset(y = 5.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(baseExtrusionColor)
+                .height(52.dp)
+                .offset(y = 4.dp)
+                .clip(buttonShape)
+                .background(Color(0xFF064E3B))
         )
-        // Tactile Top Face
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = topFaceColor,
-            border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.42f)),
-            shadowElevation = if (isPressed) 2.dp else 8.dp,
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp)
+                .height(52.dp)
                 .offset(y = pressOffset)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(buttonShape)
+                .drawWithCache {
+                    val alphaScale = if (enabled) 1f else 0.55f
+                    val bg = Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF059669).copy(alpha = alphaScale),
+                            Color(0xFF10B981).copy(alpha = alphaScale),
+                            Color(0xFF0284C7).copy(alpha = alphaScale)
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, size.height)
+                    )
+                    val sheen = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.28f),
+                            Color.Transparent
+                        ),
+                        startY = 0f,
+                        endY = size.height * 0.45f
+                    )
+                    onDrawBehind {
+                        drawRect(brush = bg)
+                        drawRect(brush = sheen)
+                    }
+                }
+                .border(
+                    width = 1.3.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            MetallicSilverRim.copy(alpha = 0.92f),
+                            NeonEmerald,
+                            NeonCyan
+                        )
+                    ),
+                    shape = buttonShape
+                )
                 .clickable(
                     interactionSource = interactionSource,
                     indication = androidx.compose.material3.ripple(color = Color.White),
                     enabled = enabled,
                     onClick = onClick
                 )
-                .testTag("taka_joma_submit_button")
+                .testTag("taka_joma_submit_button"),
+            contentAlignment = Alignment.Center
         ) {
             Row(
                 modifier = Modifier.fillMaxSize(),
@@ -1709,20 +1639,13 @@ private fun TakaJomaListRow(
             .testTag("taka_joma_row_${entry.id}"),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(IncomeSurface),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ReceiptLong,
-                contentDescription = null,
-                tint = IncomeEmerald,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        GlossyNeonIconOrb(
+            icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+            contentDescription = null,
+            glowColor = NeonEmerald,
+            size = 38.dp,
+            iconSize = 19.dp
+        )
 
         Spacer(modifier = Modifier.width(10.dp))
 

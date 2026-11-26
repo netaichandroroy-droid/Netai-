@@ -105,14 +105,15 @@ import com.example.ui.components.AppFrostedGlassBackground
 import com.example.ui.components.AppGlassSnackbarHost
 import com.example.ui.components.DeleteTransactionDialog
 import com.example.ui.components.GlassTopBarContainer
+import com.example.ui.components.GlossyNeonIconOrb
+import com.example.ui.components.NetaiBrandLogoBadge
 import com.example.ui.components.StylishBottomNavBar
 import com.example.ui.components.StylishNavTab
+import com.example.ui.components.glossyMetallicSurface
 import com.example.ui.components.isSuccessFeedbackMessage
 import com.example.ui.theme.BrandDeep
-import com.example.ui.theme.BrandHeroEnd
-import com.example.ui.theme.BrandHeroStart
-import com.example.ui.theme.BrandPrimary
-import com.example.ui.theme.BrandTint
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonEmerald
 import com.example.ui.screens.AccountsScreen
 import com.example.ui.screens.AiCallCenterScreen
 import com.example.ui.screens.ChangePasswordDialog
@@ -961,7 +962,7 @@ fun HisabMainApp(
                 if (useRail) {
                     NavigationRail(
                         modifier = Modifier.fillMaxHeight(),
-                        containerColor = Color(0xFF171024).copy(alpha = 0.80f)
+                        containerColor = Color(0xFF0A1324).copy(alpha = 0.92f)
                     ) {
                         HisabTab.entries.forEach { tab ->
                             val selected = controls.selectedTab == tab
@@ -1350,6 +1351,9 @@ fun HisabMainApp(
             ?: signedInCloudEmail.ifBlank { "Google Account" }
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showDriveBlockedDialog = false },
+            containerColor = com.example.ui.theme.CardSurfaceSolid,
+            titleContentColor = com.example.ui.theme.GlassTextPrimary,
+            textContentColor = com.example.ui.theme.GlassTextSecondary,
             title = {
                 Text("Connect Google Drive Backup File")
             },
@@ -1358,11 +1362,15 @@ fun HisabMainApp(
                     Text(
                         text = "Direct Drive API access is currently unavailable for $displayEmail.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = com.example.ui.theme.GlassTextPrimary
                     )
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                        color = com.example.ui.theme.CardInnerTileSolid,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            com.example.ui.theme.NeonCyan.copy(alpha = 0.45f)
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
@@ -1373,12 +1381,12 @@ fun HisabMainApp(
                                 text = "Recommended: Link a Google Drive Backup File",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = com.example.ui.theme.NeonCyan
                             )
                             Text(
                                 text = "Tap 'Link Drive File' below, choose Drive / My Drive in the file picker, and tap Save. Auto-backup works seamlessly with any Gmail account.",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = com.example.ui.theme.GlassTextSecondary
                             )
                         }
                     }
@@ -1433,17 +1441,24 @@ private fun MemberAppLinkConfigDialog(
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = com.example.ui.theme.CardSurfaceSolid,
+        titleContentColor = com.example.ui.theme.GlassTextPrimary,
+        textContentColor = com.example.ui.theme.GlassTextSecondary,
         title = { Text("Member Mobile Link (Login System)") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = "Members can open the link below and sign in using their Code (Login ID) and password.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = com.example.ui.theme.GlassTextSecondary
                 )
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    color = com.example.ui.theme.CardInnerTileSolid,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        com.example.ui.theme.NeonCyan.copy(alpha = 0.45f)
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -1456,13 +1471,13 @@ private fun MemberAppLinkConfigDialog(
                             Text(
                                 text = "Active Member Link:",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = com.example.ui.theme.GlassTextSecondary
                             )
                             Text(
                                 text = activeLink,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = com.example.ui.theme.NeonCyan,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -1476,7 +1491,7 @@ private fun MemberAppLinkConfigDialog(
                             Icon(
                                 imageVector = Icons.Outlined.ContentCopy,
                                 contentDescription = "Copy Link",
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = com.example.ui.theme.NeonCyan,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -1492,6 +1507,7 @@ private fun MemberAppLinkConfigDialog(
                     placeholder = { Text(MemberAppLinkStore.DEFAULT_MEMBER_APP_URL) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
+                    colors = com.example.ui.components.hisabFormFieldColors(com.example.ui.theme.NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("member_app_link_input")
@@ -1500,7 +1516,7 @@ private fun MemberAppLinkConfigDialog(
                     Text(
                         text = errorText ?: "",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                        color = com.example.ui.theme.ExpenseCrimson
                     )
                 }
                 androidx.compose.material3.OutlinedButton(
@@ -1566,8 +1582,7 @@ private fun HisabTopAppBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
+                .padding(horizontal = 12.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isSubPage) {
@@ -1586,25 +1601,12 @@ private fun HisabTopAppBar(
                 }
                 Spacer(modifier = Modifier.width(4.dp))
             } else {
-                Surface(
-                    modifier = Modifier.size(34.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color.White.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.28f))
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = if (isReportsOverview) {
-                                Icons.Outlined.BarChart
-                            } else {
-                                Icons.Outlined.AccountBalanceWallet
-                            },
-                            contentDescription = title,
-                            tint = BrandDeep,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+                NetaiBrandLogoBadge(
+                    size = 38.dp,
+                    glowColor = NeonCyan,
+                    contentDescription = title,
+                    modifier = Modifier.testTag("top_header_brand_logo")
+                )
                 Spacer(modifier = Modifier.width(10.dp))
             }
 
@@ -1613,7 +1615,7 @@ private fun HisabTopAppBar(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = BrandDeep,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1640,18 +1642,21 @@ private fun HisabTopAppBar(
                     .minimumInteractiveComponentSize()
                     .clip(RoundedCornerShape(18.dp))
                     .clickable(onClick = onAddMemberClick)
-                    .padding(vertical = 6.dp)
+                    .padding(vertical = 4.dp)
                     .testTag("top_header_add_member_button"),
                 contentAlignment = Alignment.Center
             ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.White.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.34f)),
-                    contentColor = BrandDeep
+                Box(
+                    modifier = Modifier.glossyMetallicSurface(
+                        shape = RoundedCornerShape(16.dp),
+                        accentColor = NeonEmerald,
+                        secondaryGlow = NeonCyan,
+                        borderWidth = 1.dp,
+                        streakIntensity = 0.8f
+                    )
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(

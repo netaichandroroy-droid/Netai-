@@ -31,10 +31,12 @@ import com.example.model.MemberTakaJoma
 import com.example.model.TxType
 import com.example.ui.components.AdminMemberTakaJomaTableCard
 import com.example.ui.components.GlassCardSurface
+import com.example.ui.components.GlossyInnerMetricTile
+import com.example.ui.theme.ExpenseCrimson
 import com.example.ui.theme.ExpenseCrimsonDark
-import com.example.ui.theme.ExpenseSurface
 import com.example.ui.theme.IncomeEmeraldDark
-import com.example.ui.theme.IncomeSurface
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonEmerald
 
 @Composable
 fun TransactionsScreen(
@@ -60,9 +62,9 @@ fun TransactionsScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 6.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         item {
             GlassCardSurface(
@@ -109,7 +111,7 @@ fun TransactionsScreen(
                     MonthlySummaryMetricBox(
                         label = stringResource(R.string.total_income),
                         amount = BanglaFormatters.formatBdt(monthIncome),
-                        containerColor = IncomeSurface,
+                        accentColor = NeonEmerald,
                         contentColor = IncomeEmeraldDark,
                         modifier = Modifier
                             .weight(1f)
@@ -118,7 +120,7 @@ fun TransactionsScreen(
                     MonthlySummaryMetricBox(
                         label = stringResource(R.string.total_expense),
                         amount = BanglaFormatters.formatBdt(monthExpense),
-                        containerColor = ExpenseSurface,
+                        accentColor = ExpenseCrimson,
                         contentColor = ExpenseCrimsonDark,
                         modifier = Modifier
                             .weight(1f)
@@ -127,11 +129,7 @@ fun TransactionsScreen(
                     MonthlySummaryMetricBox(
                         label = "Net Balance",
                         amount = BanglaFormatters.formatBdt(monthNetBalance),
-                        containerColor = if (monthNetBalance >= 0) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            ExpenseSurface
-                        },
+                        accentColor = if (monthNetBalance >= 0) NeonCyan else ExpenseCrimson,
                         contentColor = if (monthNetBalance >= 0) {
                             MaterialTheme.colorScheme.onPrimaryContainer
                         } else {
@@ -161,14 +159,14 @@ fun TransactionsScreen(
 private fun MonthlySummaryMetricBox(
     label: String,
     amount: String,
-    containerColor: Color,
+    accentColor: Color,
     contentColor: Color,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    GlossyInnerMetricTile(
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = containerColor
+        accentColor = accentColor,
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
             Text(

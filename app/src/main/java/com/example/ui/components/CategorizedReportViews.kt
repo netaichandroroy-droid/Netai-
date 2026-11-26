@@ -221,6 +221,7 @@ fun ReportSearchField(
         },
         singleLine = true,
         shape = RoundedCornerShape(12.dp),
+        colors = hisabFormFieldColors(),
         modifier = modifier
             .fillMaxWidth()
             .testTag(testTag)

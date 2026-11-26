@@ -79,18 +79,20 @@ import com.example.model.ReportCategory
 import com.example.model.ReportPeriodScope
 import com.example.model.TakaJomaStatus
 import com.example.model.TxType
+import com.example.ui.components.GlossyInnerMetricTile
+import com.example.ui.components.GlossyNeonIconOrb
 import com.example.ui.components.GroupedWiseReportSection
 import com.example.ui.components.MpoWiseReportSection
+import com.example.ui.components.glossyMetallicSurface
 import com.example.ui.theme.BrandDeep
-import com.example.ui.theme.BrandHeroStart
 import com.example.ui.theme.BrandPrimary
-import com.example.ui.theme.BrandTint
-import com.example.ui.theme.CardBorderSolid
-import com.example.ui.theme.CardInnerTileSolid
-import com.example.ui.theme.CardSurfaceSolid
 import com.example.ui.theme.ExpenseCrimson
 import com.example.ui.theme.IncomeEmerald
 import com.example.ui.theme.NagadAccent
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonEmerald
+import com.example.ui.theme.NeonGold
+import com.example.ui.theme.NeonPurple
 import java.util.Calendar
 import java.util.Locale
 
@@ -351,9 +353,9 @@ fun ReportsScreen(
             modifier = modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = 6.dp)
+                .padding(vertical = 4.dp)
                 .testTag("report_selection_screen"),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             CompactReportCalendarBar(
                 selectedMonth = selectedMonth,
@@ -468,16 +470,16 @@ fun ReportsScreen(
         return
     }
 
-    Surface(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 4.dp, vertical = 4.dp)
-            .testTag("report_full_page_card_${selectedCategory.name.lowercase()}"),
-        shape = RoundedCornerShape(20.dp),
-        color = CardSurfaceSolid,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, CardBorderSolid),
-        shadowElevation = 0.dp
+            .glossyMetallicSurface(
+                shape = RoundedCornerShape(22.dp),
+                accentColor = reportCategoryGlowColor(selectedCategory),
+                secondaryGlow = NeonCyan
+            )
+            .testTag("report_full_page_card_${selectedCategory.name.lowercase()}")
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
@@ -486,7 +488,7 @@ fun ReportsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
@@ -502,21 +504,14 @@ fun ReportsScreen(
                     )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color.White.copy(alpha = 0.12f))
-                        .border(0.8.dp, Color.White.copy(alpha = 0.28f), RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = reportCategoryIcon(selectedCategory),
-                        contentDescription = null,
-                        tint = BrandDeep,
-                        modifier = Modifier.size(19.dp)
-                    )
-                }
+                GlossyNeonIconOrb(
+                    icon = reportCategoryIcon(selectedCategory),
+                    contentDescription = null,
+                    glowColor = reportCategoryGlowColor(selectedCategory),
+                    iconTint = Color.White,
+                    size = 38.dp,
+                    iconSize = 19.dp
+                )
 
                 Spacer(modifier = Modifier.width(10.dp))
 
@@ -571,8 +566,8 @@ fun ReportsScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 // Month & Period Controls integrated inside the full card
                 item {
@@ -991,11 +986,10 @@ private fun ReportStatBox(
     valueColor: Color,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    GlossyInnerMetricTile(
         modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        color = Color.White.copy(alpha = 0.10f),
-        border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.22f))
+        accentColor = valueColor,
+        shape = RoundedCornerShape(14.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
@@ -1057,28 +1051,38 @@ private fun ComparisonBarRow(
     }
 }
 
+private fun reportCategoryGlowColor(category: ReportCategory): Color = when (category) {
+    ReportCategory.MONTHLY -> NeonCyan
+    ReportCategory.MPO_WISE -> NeonEmerald
+    ReportCategory.ASM_DEPOT_WISE -> NeonGold
+    ReportCategory.ASM_NAME_WISE -> NeonPurple
+    ReportCategory.AM_WISE -> NeonCyan
+    ReportCategory.REGION_WISE -> NeonEmerald
+}
+
 @Composable
 private fun ReportGlassCard(
     modifier: Modifier = Modifier,
+    accentColor: Color = NeonCyan,
     onClick: (() -> Unit)? = null,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
 ) {
-    val cardShape = RoundedCornerShape(18.dp)
-    Surface(
+    val cardShape = RoundedCornerShape(20.dp)
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        shape = cardShape,
-        color = CardSurfaceSolid,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, CardBorderSolid),
-        shadowElevation = 0.dp
+            .padding(horizontal = 10.dp)
+            .glossyMetallicSurface(
+                shape = cardShape,
+                accentColor = accentColor,
+                secondaryGlow = accentColor
+            )
     ) {
         val columnModifier = Modifier
             .fillMaxWidth()
             .clip(cardShape)
             .let { base -> if (onClick != null) base.clickable(onClick = onClick) else base }
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .padding(horizontal = 12.dp, vertical = 9.dp)
 
         Column(
             modifier = columnModifier,
@@ -1104,29 +1108,24 @@ private fun ReportCategoryFullCard(
     footerSummary: String,
     onClick: () -> Unit
 ) {
+    val glowColor = reportCategoryGlowColor(category)
     ReportGlassCard(
         modifier = Modifier.testTag(category.menuTestTag),
+        accentColor = glowColor,
         onClick = onClick
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(BrandHeroStart.copy(alpha = 0.24f))
-                    .border(0.8.dp, Color.White.copy(alpha = 0.34f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = reportCategoryIcon(category),
-                    contentDescription = null,
-                    tint = BrandDeep,
-                    modifier = Modifier.size(21.dp)
-                )
-            }
+            GlossyNeonIconOrb(
+                icon = reportCategoryIcon(category),
+                contentDescription = null,
+                glowColor = glowColor,
+                iconTint = Color.White,
+                size = 44.dp,
+                iconSize = 22.dp
+            )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -1154,33 +1153,36 @@ private fun ReportCategoryFullCard(
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(7.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             OverviewMiniKpi(
                 label = kpi1Label,
                 value = kpi1Value,
                 valueColor = kpi1Color,
+                accentColor = glowColor,
                 modifier = Modifier.weight(1f)
             )
             OverviewMiniKpi(
                 label = kpi2Label,
                 value = kpi2Value,
                 valueColor = kpi2Color,
+                accentColor = NeonEmerald,
                 modifier = Modifier.weight(1f)
             )
             OverviewMiniKpi(
                 label = kpi3Label,
                 value = kpi3Value,
                 valueColor = kpi3Color,
+                accentColor = kpi3Color,
                 modifier = Modifier.weight(1f)
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(7.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1199,7 +1201,7 @@ private fun ReportCategoryFullCard(
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = badgeColor.copy(alpha = 0.16f),
-                border = BorderStroke(0.6.dp, badgeColor.copy(alpha = 0.35f))
+                border = BorderStroke(0.8.dp, badgeColor.copy(alpha = 0.45f))
             ) {
                 Text(
                     text = badgeText,
@@ -1219,13 +1221,13 @@ private fun OverviewMiniKpi(
     label: String,
     value: String,
     valueColor: Color,
+    accentColor: Color = NeonCyan,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    GlossyInnerMetricTile(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = CardInnerTileSolid,
-        border = BorderStroke(0.8.dp, CardBorderSolid)
+        accentColor = accentColor,
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
             Text(
@@ -1268,23 +1270,23 @@ private fun CompactReportCalendarBar(
     val currentYear = parsedParts.first
     val currentMonth = parsedParts.second
 
-    val barShape = RoundedCornerShape(14.dp)
-    Surface(
+    val barShape = RoundedCornerShape(18.dp)
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .testTag("compact_report_calendar_bar"),
-        shape = barShape,
-        color = CardSurfaceSolid,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, CardBorderSolid),
-        shadowElevation = 0.dp
+            .padding(horizontal = 10.dp)
+            .glossyMetallicSurface(
+                shape = barShape,
+                accentColor = NeonCyan,
+                secondaryGlow = NeonCyan
+            )
+            .testTag("compact_report_calendar_bar")
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(barShape)
-                .padding(horizontal = 6.dp, vertical = 2.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(

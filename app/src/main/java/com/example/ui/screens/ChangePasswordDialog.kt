@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -24,11 +25,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.ui.components.hisabFormFieldColors
+import com.example.ui.theme.BrandHeroStart
+import com.example.ui.theme.CardSurfaceSolid
+import com.example.ui.theme.ExpenseCrimson
+import com.example.ui.theme.GlassTextPrimary
+import com.example.ui.theme.GlassTextSecondary
+import com.example.ui.theme.NeonCyan
 
 @Composable
 fun ChangePasswordDialog(
@@ -52,6 +61,9 @@ fun ChangePasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = CardSurfaceSolid,
+        titleContentColor = GlassTextPrimary,
+        textContentColor = GlassTextSecondary,
         title = { Text("Change Password") },
         text = {
             Column(
@@ -71,6 +83,7 @@ fun ChangePasswordDialog(
                     label = { Text("Login ID") },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
+                    colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("change_pw_login_id_input")
@@ -95,6 +108,7 @@ fun ChangePasswordDialog(
                         }
                     },
                     shape = RoundedCornerShape(12.dp),
+                    colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("change_pw_current_input")
@@ -119,6 +133,7 @@ fun ChangePasswordDialog(
                         }
                     },
                     shape = RoundedCornerShape(12.dp),
+                    colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("change_pw_new_input")
@@ -135,6 +150,7 @@ fun ChangePasswordDialog(
                     visualTransformation = if (showNew) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     shape = RoundedCornerShape(12.dp),
+                    colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("change_pw_confirm_input")
@@ -144,7 +160,7 @@ fun ChangePasswordDialog(
                     Text(
                         text = errorMessage ?: "",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                        color = ExpenseCrimson
                     )
                 }
             }
@@ -163,6 +179,10 @@ fun ChangePasswordDialog(
                         errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Failed to update password."
                     }
                 },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = BrandHeroStart,
+                    contentColor = Color.White
+                ),
                 modifier = Modifier.testTag("change_pw_submit_button")
             ) {
                 Text("Update")

@@ -43,11 +43,16 @@ import com.example.model.AccountType
 import com.example.model.BanglaFormatters
 import com.example.model.HisabTransaction
 import com.example.model.TxType
+import com.example.ui.components.GlossyNeonIconOrb
 import com.example.ui.components.SectionPanelCard
 import com.example.ui.theme.ExpenseCrimson
 import com.example.ui.theme.ExpenseSurface
 import com.example.ui.theme.IncomeEmerald
 import com.example.ui.theme.IncomeSurface
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonEmerald
+import com.example.ui.theme.NeonGold
+import com.example.ui.theme.NeonPurple
 
 @Composable
 fun AccountsScreen(
@@ -75,14 +80,16 @@ fun AccountsScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 6.dp),
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         SectionPanelCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("accounts_total_hero_card")
+                .testTag("accounts_total_hero_card"),
+            accentColor = NeonCyan,
+            secondaryGlow = NeonEmerald
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -140,7 +147,11 @@ fun AccountsScreen(
             }
         }
 
-        SectionPanelCard(modifier = Modifier.fillMaxWidth()) {
+        SectionPanelCard(
+            modifier = Modifier.fillMaxWidth(),
+            accentColor = NeonPurple,
+            secondaryGlow = NeonGold
+        ) {
             Text(
                 text = "Overall Summary",
                 style = MaterialTheme.typography.titleMedium,
@@ -220,20 +231,14 @@ private fun AccountListRow(
             .padding(vertical = 7.dp, horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        GlossyNeonIconOrb(
+            icon = icon,
+            contentDescription = title,
+            glowColor = if (balance >= 0) NeonCyan else ExpenseCrimson,
+            iconTint = Color.White,
+            size = 42.dp,
+            iconSize = 20.dp
+        )
 
         Spacer(modifier = Modifier.width(12.dp))
 
@@ -309,20 +314,14 @@ private fun AccountSummaryListRow(
             .padding(vertical = 7.dp, horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(iconBg),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(18.dp)
-            )
-        }
+        GlossyNeonIconOrb(
+            icon = icon,
+            contentDescription = null,
+            glowColor = iconTint,
+            iconTint = Color.White,
+            size = 38.dp,
+            iconSize = 18.dp
+        )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = label,

@@ -172,9 +172,9 @@ fun AiCallCenterScreen(
         modifier = modifier
             .fillMaxSize()
             .testTag("ai_call_center_screen"),
-        contentPadding = PaddingValues(vertical = 8.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         if (state.isCallActive) {
             item {

@@ -50,17 +50,19 @@ import com.example.model.MemberSalesDuesCalculator
 import com.example.model.MemberTakaJoma
 import com.example.model.MonthlySalesRecord
 import com.example.model.TakaJomaStatus
+import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.MonthlySalesTableCard
 import com.example.ui.components.SectionPanelCard
+import com.example.ui.components.glossyMetallicSurface
 import com.example.ui.components.isMatchingMember
-import com.example.ui.theme.CardInnerTileSolid
 import com.example.ui.theme.ExpenseCrimson
 import com.example.ui.theme.GlassTextPrimary
 import com.example.ui.theme.GlassTextSecondary
-import com.example.ui.theme.HeroCardBorderSolid
-import com.example.ui.theme.HeroCardSolid
 import com.example.ui.theme.IncomeEmerald
 import com.example.ui.theme.NagadAccent
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonEmerald
+import com.example.ui.theme.NeonPurple
 
 @Composable
 fun MemberHomeScreen(
@@ -117,27 +119,29 @@ fun MemberHomeScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 6.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         // Hero Dashboard displaying Sales, Dues, and Total Submit Taka
         item {
-            Surface(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .testTag("member_home_hero_card"),
-                shape = RoundedCornerShape(20.dp),
-                color = HeroCardSolid,
-                contentColor = GlassTextPrimary,
-                border = BorderStroke(1.dp, HeroCardBorderSolid),
-                shadowElevation = 0.dp
+                    .padding(horizontal = 10.dp)
+                    .glossyMetallicSurface(
+                        shape = RoundedCornerShape(20.dp),
+                        accentColor = NeonCyan,
+                        secondaryGlow = NeonPurple,
+                        borderWidth = 1.6.dp,
+                        isHero = true
+                    )
+                    .testTag("member_home_hero_card")
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(18.dp)
+                        .padding(horizontal = 12.dp, vertical = 11.dp)
                 ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -182,17 +186,18 @@ fun MemberHomeScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     // Sales, Dues, Total Submit Taka 3-metric grid
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         HeroSummaryMetricTile(
                             title = "TP+VAT sales",
                             value = BanglaFormatters.formatBdt(salesAmount),
                             highlightColor = GlassTextPrimary,
+                            accentColor = NeonCyan,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("member_home_sales_box")
@@ -205,6 +210,7 @@ fun MemberHomeScreen(
                             } else {
                                 IncomeEmerald
                             },
+                            accentColor = if (duesAmount > 0.0) ExpenseCrimson else NeonEmerald,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("member_home_dues_box")
@@ -213,6 +219,7 @@ fun MemberHomeScreen(
                             title = "Total Deposit",
                             value = BanglaFormatters.formatBdt(totalSubmitTaka),
                             highlightColor = IncomeEmerald,
+                            accentColor = NeonEmerald,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("member_home_submit_taka_box")
@@ -251,7 +258,10 @@ fun MemberHomeScreen(
 
         // Quick Action Card for submitting Deposit Form
         item {
-            SectionPanelCard(modifier = Modifier.fillMaxWidth()) {
+            SectionPanelCard(
+                modifier = Modifier.fillMaxWidth(),
+                accentColor = NeonEmerald
+            ) {
                 Text(
                     text = "Quick Action",
                     style = MaterialTheme.typography.titleMedium,
@@ -282,7 +292,10 @@ fun MemberHomeScreen(
 
         // Detailed Breakdown Card (Sales / Total Submit Taka / Dues) + Current Month
         item {
-            SectionPanelCard(modifier = Modifier.fillMaxWidth()) {
+            SectionPanelCard(
+                modifier = Modifier.fillMaxWidth(),
+                accentColor = NeonPurple
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -468,13 +481,13 @@ private fun HeroSummaryMetricTile(
     value: String,
     highlightColor: Color,
     modifier: Modifier = Modifier,
+    accentColor: Color = NeonCyan,
     subtitle: String = ""
 ) {
-    Surface(
+    GlossyInnerMetricTile(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = CardInnerTileSolid,
-        border = BorderStroke(1.dp, HeroCardBorderSolid)
+        accentColor = accentColor,
+        shape = RoundedCornerShape(14.dp)
     ) {
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)) {
             Text(

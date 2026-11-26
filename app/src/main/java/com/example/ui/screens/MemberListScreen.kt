@@ -83,10 +83,24 @@ import com.example.model.BanglaFormatters
 import com.example.model.Member
 import com.example.model.MemberSalesDuesCalculator
 import com.example.ui.components.GlassCardSurface
+import com.example.ui.components.GlossyFormSectionHeader
+import com.example.ui.components.GlossyInnerMetricTile
+import com.example.ui.components.GlossyNeonIconOrb
+import com.example.ui.components.hisabFilterChipBorder
+import com.example.ui.components.hisabFilterChipColors
+import com.example.ui.components.hisabFormFieldColors
+import com.example.ui.theme.BrandHeroStart
+import com.example.ui.theme.CardInnerTileSolid
+import com.example.ui.theme.CardSurfaceSolid
 import com.example.ui.theme.ExpenseCrimson
 import com.example.ui.theme.ExpenseSurface
+import com.example.ui.theme.GlassTextPrimary
+import com.example.ui.theme.GlassTextSecondary
 import com.example.ui.theme.IncomeEmerald
 import com.example.ui.theme.IncomeSurface
+import com.example.ui.theme.MetallicSilverRim
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonEmerald
 
 @Composable
 fun MemberListScreen(
@@ -171,9 +185,9 @@ fun MemberListScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 6.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         item {
             GlassCardSurface(
@@ -186,25 +200,18 @@ fun MemberListScreen(
                             .padding(vertical = 32.dp, horizontal = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Groups,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
+                        GlossyNeonIconOrb(
+                            icon = Icons.Outlined.Groups,
+                            contentDescription = null,
+                            glowColor = NeonCyan,
+                            size = 56.dp,
+                            iconSize = 28.dp
+                        )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "No members added yet. Tap 'Member +' above to create your member list.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = GlassTextSecondary,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -461,6 +468,9 @@ fun MemberListScreen(
     deletingMember?.let { target ->
         AlertDialog(
             onDismissRequest = { deletingMember = null },
+            containerColor = CardSurfaceSolid,
+            titleContentColor = GlassTextPrimary,
+            textContentColor = GlassTextSecondary,
             title = { Text("Delete Member?") },
             text = { Text("${target.name} will be permanently removed from the member list.") },
             confirmButton = {
@@ -469,7 +479,7 @@ fun MemberListScreen(
                         onDeleteMember(target)
                         deletingMember = null
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    colors = ButtonDefaults.textButtonColors(contentColor = ExpenseCrimson),
                     modifier = Modifier.testTag("confirm_delete_member_button")
                 ) {
                     Text("Delete")
@@ -564,7 +574,9 @@ private fun MemberProfileDetailSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        sheetState = sheetState,
+        containerColor = CardSurfaceSolid,
+        contentColor = GlassTextPrimary
     ) {
         Column(
             modifier = Modifier
@@ -590,7 +602,7 @@ private fun MemberProfileDetailSheet(
                         text = member.name,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = GlassTextPrimary
                     )
                     val profileMeta = listOfNotNull(
                         member.designation.takeIf { it.isNotBlank() },
@@ -600,7 +612,7 @@ private fun MemberProfileDetailSheet(
                         Text(
                             text = profileMeta,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = GlassTextSecondary
                         )
                     }
                 }
@@ -610,7 +622,7 @@ private fun MemberProfileDetailSheet(
                 )
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.65f))
+            HorizontalDivider(color = MetallicSilverRim.copy(alpha = 0.22f))
 
             ProfileSheetFieldRow("Code (Login ID)", member.code.ifBlank { "-" })
             ProfileSheetFieldRow(
@@ -633,9 +645,9 @@ private fun MemberProfileDetailSheet(
                 if (member.joiningDate.isNotBlank()) BanglaFormatters.formatBanglaDate(member.joiningDate) else "-"
             )
 
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+            GlossyInnerMetricTile(
+                accentColor = NeonCyan,
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -646,12 +658,12 @@ private fun MemberProfileDetailSheet(
                         text = "Member App Link",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = NeonCyan
                     )
                     Text(
                         text = inviteText,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = GlassTextPrimary
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -664,11 +676,17 @@ private fun MemberProfileDetailSheet(
                                 linkStatusMessage = "Link and login details copied"
                             },
                             shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = CardInnerTileSolid,
+                                contentColor = GlassTextPrimary
+                            ),
+                            border = BorderStroke(1.dp, MetallicSilverRim.copy(alpha = 0.40f)),
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.ContentCopy,
                                 contentDescription = null,
+                                tint = NeonCyan,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -686,11 +704,17 @@ private fun MemberProfileDetailSheet(
                                 context.startActivity(chooser)
                             },
                             shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = CardInnerTileSolid,
+                                contentColor = GlassTextPrimary
+                            ),
+                            border = BorderStroke(1.dp, MetallicSilverRim.copy(alpha = 0.40f)),
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Share,
                                 contentDescription = null,
+                                tint = NeonEmerald,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -701,7 +725,7 @@ private fun MemberProfileDetailSheet(
                         Text(
                             text = linkStatusMessage ?: "",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
+                            color = NeonCyan
                         )
                     }
                 }
@@ -813,7 +837,9 @@ internal fun MemberEditorModalSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        sheetState = sheetState,
+        containerColor = CardSurfaceSolid,
+        contentColor = GlassTextPrimary
     ) {
         Column(
             modifier = Modifier
@@ -823,10 +849,11 @@ internal fun MemberEditorModalSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp)
         ) {
-            Text(
-                text = if (editingMember == null) "Add New Member" else "Edit Member Profile",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface
+            GlossyFormSectionHeader(
+                icon = Icons.Outlined.Groups,
+                title = if (editingMember == null) "Add New Member" else "Edit Member Profile",
+                subtitle = if (editingMember == null) "Create Login Code & Profile" else "Update Details",
+                glowColor = NeonCyan
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -841,6 +868,7 @@ internal fun MemberEditorModalSheet(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 shape = RoundedCornerShape(12.dp),
+                colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("member_code_input")
@@ -858,6 +886,7 @@ internal fun MemberEditorModalSheet(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 shape = RoundedCornerShape(12.dp),
+                colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("member_name_input")
@@ -875,6 +904,7 @@ internal fun MemberEditorModalSheet(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 shape = RoundedCornerShape(12.dp),
+                colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("member_designation_input")
@@ -897,10 +927,8 @@ internal fun MemberEditorModalSheet(
                             errorMessage = null
                         },
                         label = { Text(roleChip) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.primary
-                        ),
+                        colors = hisabFilterChipColors(accentColor = NeonCyan),
+                        border = hisabFilterChipBorder(selected = isPicked, accentColor = NeonCyan),
                         modifier = Modifier.testTag("member_designation_chip_${roleChip.lowercase()}")
                     )
                 }
@@ -918,6 +946,7 @@ internal fun MemberEditorModalSheet(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 shape = RoundedCornerShape(12.dp),
+                colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("member_area_input")
@@ -935,6 +964,7 @@ internal fun MemberEditorModalSheet(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 shape = RoundedCornerShape(12.dp),
+                colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("member_depot_input")
@@ -955,6 +985,7 @@ internal fun MemberEditorModalSheet(
                     imeAction = ImeAction.Next
                 ),
                 shape = RoundedCornerShape(12.dp),
+                colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("member_phone_input")
@@ -972,6 +1003,7 @@ internal fun MemberEditorModalSheet(
                     imeAction = ImeAction.Next
                 ),
                 shape = RoundedCornerShape(12.dp),
+                colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("member_email_input")
@@ -986,6 +1018,7 @@ internal fun MemberEditorModalSheet(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 shape = RoundedCornerShape(12.dp),
+                colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("member_address_input")
@@ -1000,6 +1033,7 @@ internal fun MemberEditorModalSheet(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 shape = RoundedCornerShape(12.dp),
+                colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("member_joining_date_input")
@@ -1017,12 +1051,12 @@ internal fun MemberEditorModalSheet(
                         text = "Active Status",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = GlassTextPrimary
                     )
                     Text(
                         text = if (isActive) "Active (ON)" else "Inactive (OFF)",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = GlassTextSecondary
                     )
                 }
                 Switch(
@@ -1035,9 +1069,9 @@ internal fun MemberEditorModalSheet(
             Spacer(modifier = Modifier.height(10.dp))
 
             val previewCredential = code.trim().ifBlank { "Member Code" }
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
+            GlossyInnerMetricTile(
+                accentColor = NeonEmerald,
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -1045,13 +1079,13 @@ internal fun MemberEditorModalSheet(
                         text = "Member App Login Credentials",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = IncomeEmerald
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "Login ID: $previewCredential  •  Password: $previewCredential",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = GlassTextPrimary
                     )
                     if (editingMember != null && !editingMember.isDefaultPassword && code.isNotBlank() && onResetPassword != null) {
                         Spacer(modifier = Modifier.height(6.dp))
@@ -1074,7 +1108,7 @@ internal fun MemberEditorModalSheet(
                 Text(
                     text = errorMessage ?: "",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+                    color = ExpenseCrimson
                 )
             }
 
@@ -1105,12 +1139,19 @@ internal fun MemberEditorModalSheet(
                     )
                 },
                 shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = BrandHeroStart,
+                    contentColor = Color.White
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
                     .testTag("save_member_button")
             ) {
-                Text(if (editingMember == null) "Save Member" else "Update Member")
+                Text(
+                    text = if (editingMember == null) "Save Member" else "Update Member",
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

@@ -69,8 +69,14 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.components.AppFrostedGlassBackground
 import com.example.ui.components.GlassCardSurface
+import com.example.ui.components.NetaiBrandLogoBadge
+import com.example.ui.components.hisabFormFieldColors
 import com.example.ui.theme.BrandHeroStart
 import com.example.ui.theme.DisplayGlassFont
+import com.example.ui.theme.ExpenseCrimson
+import com.example.ui.theme.ExpenseSurface
+import com.example.ui.theme.NeonBlue
+import com.example.ui.theme.NeonCyan
 
 @Composable
 fun AppLoginScreen(
@@ -106,10 +112,22 @@ fun AppLoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             GlassCardSurface(
+                accentColor = NeonCyan,
+                secondaryGlow = NeonBlue,
                 modifier = Modifier
                     .widthIn(max = 460.dp)
                     .testTag("app_login_card")
             ) {
+                NetaiBrandLogoBadge(
+                    size = 76.dp,
+                    glowColor = NeonCyan,
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .testTag("app_login_logo")
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
                 IridescentGlassDepotTitle(
                     title = stringResource(R.string.login_depot_title),
                     modifier = Modifier.fillMaxWidth()
@@ -136,6 +154,7 @@ fun AppLoginScreen(
                         imeAction = ImeAction.Next
                     ),
                     shape = RoundedCornerShape(12.dp),
+                    colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("app_login_id_input")
@@ -172,6 +191,7 @@ fun AppLoginScreen(
                     ),
                     keyboardActions = KeyboardActions(onDone = { submitLogin() }),
                     shape = RoundedCornerShape(12.dp),
+                    colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("app_login_password_input")
@@ -181,13 +201,14 @@ fun AppLoginScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                        color = ExpenseSurface,
+                        border = BorderStroke(1.dp, ExpenseCrimson.copy(alpha = 0.55f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = errorMessage ?: "",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
+                            color = ExpenseCrimson,
                             modifier = Modifier.padding(12.dp)
                         )
                     }
