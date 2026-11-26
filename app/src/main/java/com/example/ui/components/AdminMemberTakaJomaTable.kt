@@ -83,6 +83,7 @@ fun AdminMemberTakaJomaTableCard(
     onRejectSubmission: ((MemberTakaJoma) -> Unit)? = null,
     onOpenForm: (() -> Unit)? = null,
     pendingOnlyMode: Boolean = false,
+    embeddedInOuterCard: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
@@ -168,10 +169,7 @@ fun AdminMemberTakaJomaTableCard(
     }
     val statusColW = if (onApproveSubmission != null) 104.dp else 80.dp
 
-    GlassCardSurface(
-        modifier = modifier.testTag("admin_member_taka_joma_card"),
-        contentPadding = PaddingValues(vertical = 4.dp)
-    ) {
+    val tableContent: @Composable () -> Unit = {
         Column(modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp)) {
             Row(
                 modifier = Modifier
@@ -600,6 +598,19 @@ fun AdminMemberTakaJomaTableCard(
                     }
                 }
             }
+        }
+    }
+
+    if (embeddedInOuterCard) {
+        Box(modifier = modifier.fillMaxWidth().testTag("admin_member_taka_joma_card")) {
+            tableContent()
+        }
+    } else {
+        GlassCardSurface(
+            modifier = modifier.testTag("admin_member_taka_joma_card"),
+            contentPadding = PaddingValues(vertical = 4.dp)
+        ) {
+            tableContent()
         }
     }
 
