@@ -24,6 +24,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android SDK Licenses
+        run: yes | sdkmanager --licenses >/dev/null 2>&1 || true
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -37,25 +40,31 @@ jobs:
             printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
           fi
           if [ ! -f app/google-services.json ]; then
-            echo "ERROR: app/google-services.json is missing. Commit app/google-services.json or set the GOOGLE_SERVICES_JSON repository secret."
-            exit 1
+            echo "WARNING: app/google-services.json is missing; proceeding with MissingGoogleServicesStrategy.WARN."
           fi
           if [ ! -f .env.example ]; then
             echo "# Secrets Gradle Plugin defaults" > .env.example
+          fi
+          if [ ! -f .env ]; then
+            touch .env
           fi
 
       - name: Generate Debug Keystore
         run: |
           if [ ! -f debug.keystore ]; then
-            keytool -genkeypair -v \
-              -keystore debug.keystore \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
+            if [ -f debug.keystore.base64 ]; then
+              base64 -d debug.keystore.base64 > debug.keystore
+            else
+              keytool -genkeypair -v \
+                -keystore debug.keystore \
+                -storepass android \
+                -alias androiddebugkey \
+                -keypass android \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
           fi
 
       - name: Build Debug APK
