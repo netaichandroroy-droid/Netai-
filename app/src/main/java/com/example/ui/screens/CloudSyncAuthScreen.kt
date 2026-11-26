@@ -46,8 +46,10 @@ import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.ui.components.AppFrostedGlassBackground
 import com.example.ui.components.GlassCardSurface
+import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.GlossyNeonIconOrb
 import com.example.ui.components.NetaiBrandLogoBadge
+import com.example.ui.components.hisab3DButtonSurface
 import com.example.ui.theme.BrandHeroStart
 import com.example.ui.theme.ExpenseCrimson
 import com.example.ui.theme.ExpenseSurface
@@ -124,9 +126,9 @@ fun CloudSyncAuthScreen(
                     )
 
                     if (!errorMessage.isNullOrBlank()) {
-                        Surface(
+                        GlossyInnerMetricTile(
+                            accentColor = ExpenseCrimson,
                             shape = RoundedCornerShape(12.dp),
-                            color = ExpenseSurface,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
@@ -152,6 +154,7 @@ fun CloudSyncAuthScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
+                            .hisab3DButtonSurface(accentColor = NeonCyan, cornerRadius = 14.dp)
                             .testTag("google_sign_in_button")
                     ) {
                         if (isCheckingSession || isSigningIn) {

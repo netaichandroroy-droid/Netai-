@@ -69,6 +69,8 @@ import com.example.ui.components.GlossyFormSectionHeader
 import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.MonthlySalesTableCard
 import com.example.ui.components.SectionPanelCard
+import com.example.ui.components.hisab3DButtonSurface
+import com.example.ui.components.hisab3DFieldDepth
 import com.example.ui.components.hisabFilterChipBorder
 import com.example.ui.components.hisabFilterChipColors
 import com.example.ui.components.hisabFormFieldColors
@@ -372,6 +374,7 @@ fun SalesUploadScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp)
+                        .hisab3DButtonSurface(accentColor = NeonCyan, cornerRadius = 14.dp)
                         .testTag("sales_upload_file_button")
                 ) {
                     Icon(
@@ -401,6 +404,7 @@ fun SalesUploadScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
+                            .hisab3DButtonSurface(accentColor = NeonCyan, cornerRadius = 12.dp)
                             .testTag("sales_paste_table_button")
                     ) {
                         Icon(
@@ -427,6 +431,7 @@ fun SalesUploadScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
+                            .hisab3DButtonSurface(accentColor = NeonEmerald, cornerRadius = 12.dp)
                             .testTag("sales_manual_add_button")
                     ) {
                         Icon(
@@ -661,6 +666,7 @@ private fun PasteSalesTableDialog(
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                         .testTag("sales_paste_text_input")
                 )
                 if (!errorText.isNullOrBlank()) {
@@ -686,7 +692,10 @@ private fun PasteSalesTableDialog(
                     containerColor = BrandHeroStart,
                     contentColor = Color.White
                 ),
-                modifier = Modifier.testTag("sales_paste_import_button")
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 12.dp)
+                    .testTag("sales_paste_import_button")
             ) {
                 Text("Upload")
             }
@@ -775,6 +784,7 @@ private fun SalesRecordEditorDialog(
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                         .testTag("sales_manual_code_input")
                 )
 
@@ -790,6 +800,7 @@ private fun SalesRecordEditorDialog(
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                         .testTag("sales_manual_name_input")
                 )
 
@@ -806,6 +817,7 @@ private fun SalesRecordEditorDialog(
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                         .testTag("sales_manual_tp_input")
                 )
 
@@ -822,6 +834,7 @@ private fun SalesRecordEditorDialog(
                     colors = hisabFormFieldColors(accentColor = NeonEmerald),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonEmerald)
                         .testTag("sales_manual_tp_vat_input")
                 )
 
@@ -855,7 +868,10 @@ private fun SalesRecordEditorDialog(
                     containerColor = BrandHeroStart,
                     contentColor = Color.White
                 ),
-                modifier = Modifier.testTag("sales_manual_save_button")
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 12.dp)
+                    .testTag("sales_manual_save_button")
             ) {
                 Text("Save")
             }

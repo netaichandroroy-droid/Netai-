@@ -69,7 +69,10 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.components.AppFrostedGlassBackground
 import com.example.ui.components.GlassCardSurface
+import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.NetaiBrandLogoBadge
+import com.example.ui.components.hisab3DButtonSurface
+import com.example.ui.components.hisab3DFieldDepth
 import com.example.ui.components.hisabFormFieldColors
 import com.example.ui.theme.BrandHeroStart
 import com.example.ui.theme.DisplayGlassFont
@@ -157,6 +160,7 @@ fun AppLoginScreen(
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                         .testTag("app_login_id_input")
                 )
 
@@ -194,15 +198,15 @@ fun AppLoginScreen(
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                         .testTag("app_login_password_input")
                 )
 
                 if (!errorMessage.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = ExpenseSurface,
-                        border = BorderStroke(1.dp, ExpenseCrimson.copy(alpha = 0.55f)),
+                    GlossyInnerMetricTile(
+                        accentColor = ExpenseCrimson,
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
@@ -221,6 +225,7 @@ fun AppLoginScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp)
+                        .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 14.dp)
                         .testTag("app_login_submit_button"),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(

@@ -86,6 +86,8 @@ import com.example.ui.components.GlassCardSurface
 import com.example.ui.components.GlossyFormSectionHeader
 import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.GlossyNeonIconOrb
+import com.example.ui.components.hisab3DButtonSurface
+import com.example.ui.components.hisab3DFieldDepth
 import com.example.ui.components.hisabFilterChipBorder
 import com.example.ui.components.hisabFilterChipColors
 import com.example.ui.components.hisabFormFieldColors
@@ -871,6 +873,7 @@ internal fun MemberEditorModalSheet(
                 colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .hisab3DFieldDepth(accentColor = NeonCyan)
                     .testTag("member_code_input")
             )
 
@@ -889,6 +892,7 @@ internal fun MemberEditorModalSheet(
                 colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .hisab3DFieldDepth(accentColor = NeonCyan)
                     .testTag("member_name_input")
             )
 
@@ -907,6 +911,7 @@ internal fun MemberEditorModalSheet(
                 colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .hisab3DFieldDepth(accentColor = NeonCyan)
                     .testTag("member_designation_input")
             )
 
@@ -949,6 +954,7 @@ internal fun MemberEditorModalSheet(
                 colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .hisab3DFieldDepth(accentColor = NeonCyan)
                     .testTag("member_area_input")
             )
 
@@ -967,6 +973,7 @@ internal fun MemberEditorModalSheet(
                 colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .hisab3DFieldDepth(accentColor = NeonCyan)
                     .testTag("member_depot_input")
             )
 
@@ -988,6 +995,7 @@ internal fun MemberEditorModalSheet(
                 colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .hisab3DFieldDepth(accentColor = NeonCyan)
                     .testTag("member_phone_input")
             )
 
@@ -1006,6 +1014,7 @@ internal fun MemberEditorModalSheet(
                 colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .hisab3DFieldDepth(accentColor = NeonCyan)
                     .testTag("member_email_input")
             )
 
@@ -1021,6 +1030,7 @@ internal fun MemberEditorModalSheet(
                 colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .hisab3DFieldDepth(accentColor = NeonCyan)
                     .testTag("member_address_input")
             )
 
@@ -1036,6 +1046,7 @@ internal fun MemberEditorModalSheet(
                 colors = hisabFormFieldColors(accentColor = NeonCyan),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .hisab3DFieldDepth(accentColor = NeonCyan)
                     .testTag("member_joining_date_input")
             )
 
@@ -1146,6 +1157,7 @@ internal fun MemberEditorModalSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
+                    .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 14.dp)
                     .testTag("save_member_button")
             ) {
                 Text(

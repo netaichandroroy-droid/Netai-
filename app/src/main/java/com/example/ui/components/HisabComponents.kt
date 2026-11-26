@@ -63,7 +63,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -179,10 +183,17 @@ fun Modifier.glossyMetallicSurface(
     shape: Shape,
     accentColor: Color = NeonCyan,
     secondaryGlow: Color = accentColor,
-    borderWidth: Dp = 1.4.dp,
+    borderWidth: Dp = 1.5.dp,
     streakIntensity: Float = 1f,
     isHero: Boolean = false
 ): Modifier = this
+    .shadow(
+        elevation = if (isHero) 16.dp else 12.dp,
+        shape = shape,
+        clip = false,
+        ambientColor = accentColor.copy(alpha = 0.52f),
+        spotColor = Color.Black.copy(alpha = 0.96f)
+    )
     .clip(shape)
     .drawWithCache {
         val w = size.width
@@ -233,7 +244,7 @@ fun Modifier.glossyMetallicSurface(
         val streakPrimaryBrush = Brush.linearGradient(
             colors = listOf(
                 Color.White.copy(alpha = 0.04f * streakIntensity),
-                Color.White.copy(alpha = 0.11f * streakIntensity),
+                Color.White.copy(alpha = 0.12f * streakIntensity),
                 Color.White.copy(alpha = 0.02f * streakIntensity)
             ),
             start = Offset(w * 0.08f, 0f),
@@ -249,7 +260,7 @@ fun Modifier.glossyMetallicSurface(
         }
         val streakSecondaryBrush = Brush.linearGradient(
             colors = listOf(
-                Color(0xFFBAE6FD).copy(alpha = 0.13f * streakIntensity),
+                Color(0xFFBAE6FD).copy(alpha = 0.14f * streakIntensity),
                 Color.White.copy(alpha = 0.06f * streakIntensity),
                 Color.Transparent
             ),
@@ -259,32 +270,42 @@ fun Modifier.glossyMetallicSurface(
 
         val topSheenBrush = Brush.verticalGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.16f * streakIntensity),
+                Color.White.copy(alpha = 0.22f * streakIntensity),
+                Color(0xFFBAE6FD).copy(alpha = 0.06f * streakIntensity),
                 Color.Transparent
             ),
             startY = 0f,
-            endY = (h * 0.26f).coerceAtLeast(1f)
+            endY = (h * 0.28f).coerceAtLeast(1f)
+        )
+
+        val topBevelLineBrush = Brush.horizontalGradient(
+            colors = listOf(
+                Color.Transparent,
+                MetallicSilverRim.copy(alpha = 0.68f),
+                Color.White.copy(alpha = 0.82f),
+                MetallicSilverRim.copy(alpha = 0.56f),
+                Color.Transparent
+            )
+        )
+
+        val bottomExtrusionShadowBrush = Brush.verticalGradient(
+            colors = listOf(
+                Color.Transparent,
+                Color(0xFF02060F).copy(alpha = 0.78f),
+                Color(0xFF01040B).copy(alpha = 0.94f)
+            ),
+            startY = (h - 14.dp.toPx()).coerceAtLeast(0f),
+            endY = h
         )
 
         val bottomGlowBrush = Brush.horizontalGradient(
             colors = listOf(
                 Color.Transparent,
-                accentColor.copy(alpha = 0.85f),
-                MetallicSilverRim.copy(alpha = 0.72f),
-                secondaryGlow.copy(alpha = 0.82f),
+                accentColor.copy(alpha = 0.88f),
+                MetallicSilverRim.copy(alpha = 0.76f),
+                secondaryGlow.copy(alpha = 0.86f),
                 Color.Transparent
             )
-        )
-
-        val borderBrush = Brush.linearGradient(
-            colors = listOf(
-                MetallicSilverRim.copy(alpha = 0.88f),
-                accentColor.copy(alpha = 0.65f),
-                MetallicSilverRim.copy(alpha = 0.48f),
-                secondaryGlow.copy(alpha = 0.96f)
-            ),
-            start = Offset(0f, 0f),
-            end = Offset(w, h)
         )
 
         onDrawBehind {
@@ -294,11 +315,20 @@ fun Modifier.glossyMetallicSurface(
             drawPath(path = streakPrimary, brush = streakPrimaryBrush)
             drawPath(path = streakSecondary, brush = streakSecondaryBrush)
             drawRect(brush = topSheenBrush)
-            val rimThickness = 2.5.dp.toPx()
+            drawRect(brush = bottomExtrusionShadowBrush)
+            val topBevelY = 1.6.dp.toPx()
+            drawLine(
+                brush = topBevelLineBrush,
+                start = Offset(w * 0.05f, topBevelY),
+                end = Offset(w * 0.95f, topBevelY),
+                strokeWidth = 1.4.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            val rimThickness = 2.6.dp.toPx()
             drawLine(
                 brush = bottomGlowBrush,
-                start = Offset(w * 0.08f, h - rimThickness * 0.45f),
-                end = Offset(w * 0.92f, h - rimThickness * 0.45f),
+                start = Offset(w * 0.07f, h - rimThickness * 0.55f),
+                end = Offset(w * 0.93f, h - rimThickness * 0.55f),
                 strokeWidth = rimThickness,
                 cap = StrokeCap.Round
             )
@@ -308,10 +338,10 @@ fun Modifier.glossyMetallicSurface(
         width = borderWidth,
         brush = Brush.linearGradient(
             colors = listOf(
-                MetallicSilverRim.copy(alpha = 0.86f),
-                accentColor.copy(alpha = 0.68f),
-                MetallicSilverRim.copy(alpha = 0.45f),
-                secondaryGlow.copy(alpha = 0.96f)
+                MetallicSilverRim.copy(alpha = 0.94f),
+                accentColor.copy(alpha = 0.72f),
+                MetallicSilverRim.copy(alpha = 0.44f),
+                secondaryGlow.copy(alpha = 0.98f)
             )
         ),
         shape = shape
@@ -419,6 +449,13 @@ fun GlossyInnerMetricTile(
 ) {
     Box(
         modifier = modifier
+            .shadow(
+                elevation = 7.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = accentColor.copy(alpha = 0.42f),
+                spotColor = Color.Black.copy(alpha = 0.92f)
+            )
             .clip(shape)
             .drawWithCache {
                 val w = size.width
@@ -434,23 +471,59 @@ fun GlossyInnerMetricTile(
                 )
                 val glowWash = Brush.radialGradient(
                     colors = listOf(
-                        accentColor.copy(alpha = 0.16f),
+                        accentColor.copy(alpha = 0.18f),
                         Color.Transparent
                     ),
                     center = Offset(w * 0.2f, h * 0.9f),
-                    radius = maxOf(w, h) * 0.7f
+                    radius = maxOf(w, h) * 0.72f
+                )
+                val topSheen = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.16f),
+                        Color.Transparent
+                    ),
+                    startY = 0f,
+                    endY = (h * 0.32f).coerceAtLeast(1f)
+                )
+                val bottomDepth = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color(0xFF02060E).copy(alpha = 0.88f)
+                    ),
+                    startY = (h - 9.dp.toPx()).coerceAtLeast(0f),
+                    endY = h
+                )
+                val topBevelBrush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        MetallicSilverRim.copy(alpha = 0.48f),
+                        Color.White.copy(alpha = 0.56f),
+                        MetallicSilverRim.copy(alpha = 0.36f),
+                        Color.Transparent
+                    )
                 )
                 onDrawBehind {
                     drawRect(brush = bgBrush)
                     drawRect(brush = glowWash)
+                    drawRect(brush = topSheen)
+                    drawRect(brush = bottomDepth)
+                    val topY = 1.2.dp.toPx()
+                    drawLine(
+                        brush = topBevelBrush,
+                        start = Offset(w * 0.06f, topY),
+                        end = Offset(w * 0.94f, topY),
+                        strokeWidth = 1.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
                 }
             }
             .border(
-                width = 1.dp,
+                width = 1.2.dp,
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        MetallicSilverRim.copy(alpha = 0.58f),
-                        accentColor.copy(alpha = 0.72f)
+                        MetallicSilverRim.copy(alpha = 0.72f),
+                        accentColor.copy(alpha = 0.84f),
+                        Color(0xFF071122).copy(alpha = 0.90f)
                     )
                 ),
                 shape = shape
@@ -945,11 +1018,11 @@ fun hisabFormFieldColors(
     accentColor: Color = NeonCyan
 ): TextFieldColors = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = CardInnerTileSolid,
-    unfocusedContainerColor = CardInnerTileSolid.copy(alpha = 0.92f),
+    unfocusedContainerColor = CardInnerTileSolid.copy(alpha = 0.94f),
     disabledContainerColor = CardInnerTileSolid.copy(alpha = 0.55f),
     focusedBorderColor = accentColor,
-    unfocusedBorderColor = MetallicSilverRim.copy(alpha = 0.42f),
-    disabledBorderColor = MetallicSilverRim.copy(alpha = 0.22f),
+    unfocusedBorderColor = MetallicSilverRim.copy(alpha = 0.48f),
+    disabledBorderColor = MetallicSilverRim.copy(alpha = 0.24f),
     errorBorderColor = ExpenseCrimson,
     focusedTextColor = GlassTextPrimary,
     unfocusedTextColor = GlassTextPrimary,
@@ -966,6 +1039,110 @@ fun hisabFormFieldColors(
     cursorColor = accentColor
 )
 
+fun Modifier.hisab3DFieldDepth(
+    accentColor: Color = NeonCyan,
+    cornerRadius: Dp = 12.dp,
+    topLabelOffset: Dp = 8.dp
+): Modifier = this.drawWithContent {
+    val topY = topLabelOffset.toPx().coerceAtMost(size.height * 0.25f)
+    val boxHeight = (size.height - topY).coerceAtLeast(1f)
+    val cr = cornerRadius.toPx()
+
+    // 3D drop shadow & extruded lower lip directly beneath the OutlinedTextField box
+    drawRoundRect(
+        color = Color(0xFF01040B).copy(alpha = 0.82f),
+        topLeft = Offset(1.dp.toPx(), topY + 3.5.dp.toPx()),
+        size = Size((size.width - 2.dp.toPx()).coerceAtLeast(1f), boxHeight),
+        cornerRadius = CornerRadius(cr, cr)
+    )
+    drawRoundRect(
+        brush = Brush.horizontalGradient(
+            colors = listOf(
+                Color.Transparent,
+                accentColor.copy(alpha = 0.42f),
+                MetallicSilverRim.copy(alpha = 0.32f),
+                accentColor.copy(alpha = 0.42f),
+                Color.Transparent
+            )
+        ),
+        topLeft = Offset(2.dp.toPx(), topY + 2.dp.toPx()),
+        size = Size((size.width - 4.dp.toPx()).coerceAtLeast(1f), boxHeight),
+        cornerRadius = CornerRadius(cr, cr),
+        style = Stroke(width = 1.4.dp.toPx())
+    )
+
+    drawContent()
+
+    // Subtle upper metallic sheen inside the field box without touching the floating label
+    drawRoundRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                MetallicSilverRim.copy(alpha = 0.08f),
+                Color.Transparent
+            ),
+            startY = topY,
+            endY = topY + (boxHeight * 0.34f)
+        ),
+        topLeft = Offset(1.dp.toPx(), topY + 1.dp.toPx()),
+        size = Size((size.width - 2.dp.toPx()).coerceAtLeast(1f), (boxHeight - 2.dp.toPx()).coerceAtLeast(1f)),
+        cornerRadius = CornerRadius(cr, cr)
+    )
+}
+
+fun Modifier.hisab3DButtonSurface(
+    accentColor: Color = NeonCyan,
+    cornerRadius: Dp = 14.dp
+): Modifier {
+    val shape = RoundedCornerShape(cornerRadius)
+    return this
+        .shadow(
+            elevation = 10.dp,
+            shape = shape,
+            clip = false,
+            ambientColor = accentColor.copy(alpha = 0.62f),
+            spotColor = Color.Black.copy(alpha = 0.96f)
+        )
+        .drawWithContent {
+            val cr = cornerRadius.toPx()
+            drawContent()
+            drawRoundRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.24f),
+                        Color.Transparent,
+                        Color.Black.copy(alpha = 0.36f)
+                    )
+                ),
+                cornerRadius = CornerRadius(cr, cr)
+            )
+            drawRoundRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        MetallicSilverRim.copy(alpha = 0.78f),
+                        accentColor.copy(alpha = 0.68f),
+                        Color.Black.copy(alpha = 0.45f)
+                    )
+                ),
+                cornerRadius = CornerRadius(cr, cr),
+                style = Stroke(width = 1.2.dp.toPx())
+            )
+        }
+}
+
+fun Modifier.hisab3DSegmentedShell(
+    accentColor: Color = NeonCyan,
+    cornerRadius: Dp = 20.dp
+): Modifier {
+    val shape = RoundedCornerShape(cornerRadius)
+    return this.shadow(
+        elevation = 6.dp,
+        shape = shape,
+        clip = false,
+        ambientColor = accentColor.copy(alpha = 0.40f),
+        spotColor = Color.Black.copy(alpha = 0.90f)
+    )
+}
+
 @Composable
 fun hisabFilterChipColors(
     accentColor: Color = NeonCyan
@@ -973,7 +1150,7 @@ fun hisabFilterChipColors(
     containerColor = CardInnerTileSolid,
     labelColor = GlassTextSecondary,
     iconColor = GlassTextSecondary,
-    selectedContainerColor = accentColor.copy(alpha = 0.24f),
+    selectedContainerColor = accentColor.copy(alpha = 0.26f),
     selectedLabelColor = Color.White,
     selectedLeadingIconColor = accentColor
 )
@@ -985,10 +1162,10 @@ fun hisabFilterChipBorder(
 ) = FilterChipDefaults.filterChipBorder(
     enabled = true,
     selected = selected,
-    borderColor = MetallicSilverRim.copy(alpha = 0.34f),
-    selectedBorderColor = accentColor.copy(alpha = 0.88f),
-    borderWidth = 1.dp,
-    selectedBorderWidth = 1.2.dp
+    borderColor = MetallicSilverRim.copy(alpha = 0.42f),
+    selectedBorderColor = accentColor.copy(alpha = 0.94f),
+    borderWidth = 1.1.dp,
+    selectedBorderWidth = 1.4.dp
 )
 
 @Composable

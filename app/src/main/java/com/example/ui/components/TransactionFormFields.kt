@@ -141,7 +141,11 @@ fun TransactionFormFields(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .hisab3DSegmentedShell(accentColor = formAccent)
+        ) {
             TxType.entries.forEachIndexed { index, txType ->
                 SegmentedButton(
                     selected = selectedType == txType,
@@ -185,6 +189,7 @@ fun TransactionFormFields(
                 colors = hisabFormFieldColors(accentColor = formAccent),
                 modifier = Modifier
                     .weight(1.2f)
+                    .hisab3DFieldDepth(accentColor = formAccent)
                     .testTag("${tagPrefix}_amount_input")
             )
 
@@ -198,7 +203,9 @@ fun TransactionFormFields(
                 border = BorderStroke(1.dp, MetallicSilverRim.copy(alpha = 0.42f)),
                 modifier = Modifier
                     .weight(1f)
-                    .height(56.dp)
+                    .padding(top = 6.dp)
+                    .height(52.dp)
+                    .hisab3DButtonSurface(accentColor = NeonCyan, cornerRadius = 12.dp)
                     .testTag("${tagPrefix}_date_button")
             ) {
                 Icon(
@@ -251,6 +258,7 @@ fun TransactionFormFields(
             colors = hisabFormFieldColors(accentColor = formAccent),
             modifier = Modifier
                 .fillMaxWidth()
+                .hisab3DFieldDepth(accentColor = formAccent)
                 .testTag("${tagPrefix}_note_input")
         )
 
@@ -262,7 +270,11 @@ fun TransactionFormFields(
             color = GlassTextSecondary
         )
         Spacer(modifier = Modifier.height(8.dp))
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .hisab3DSegmentedShell(accentColor = formAccent)
+        ) {
             AccountType.entries.forEachIndexed { index, account ->
                 SegmentedButton(
                     selected = selectedAccount == account,
@@ -298,6 +310,7 @@ fun TransactionFormFields(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp)
+                .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 14.dp)
                 .testTag("${tagPrefix}_save_button")
         ) {
             if (isSaving) {

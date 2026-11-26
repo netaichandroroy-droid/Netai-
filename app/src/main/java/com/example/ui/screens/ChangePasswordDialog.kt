@@ -31,6 +31,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.ui.components.hisab3DButtonSurface
+import com.example.ui.components.hisab3DFieldDepth
 import com.example.ui.components.hisabFormFieldColors
 import com.example.ui.theme.BrandHeroStart
 import com.example.ui.theme.CardSurfaceSolid
@@ -86,6 +88,7 @@ fun ChangePasswordDialog(
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                         .testTag("change_pw_login_id_input")
                 )
 
@@ -111,6 +114,7 @@ fun ChangePasswordDialog(
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                         .testTag("change_pw_current_input")
                 )
 
@@ -136,6 +140,7 @@ fun ChangePasswordDialog(
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                         .testTag("change_pw_new_input")
                 )
 
@@ -153,6 +158,7 @@ fun ChangePasswordDialog(
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                         .testTag("change_pw_confirm_input")
                 )
 
@@ -183,7 +189,10 @@ fun ChangePasswordDialog(
                     containerColor = BrandHeroStart,
                     contentColor = Color.White
                 ),
-                modifier = Modifier.testTag("change_pw_submit_button")
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 12.dp)
+                    .testTag("change_pw_submit_button")
             ) {
                 Text("Update")
             }

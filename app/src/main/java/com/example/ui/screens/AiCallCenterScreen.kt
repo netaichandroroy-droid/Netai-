@@ -69,7 +69,9 @@ import com.example.data.AiCallCenterPrefsStore
 import com.example.data.AiCallStatus
 import com.example.model.BanglaFormatters
 import com.example.ui.AiCallCenterUiState
+import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.SectionPanelCard
+import com.example.ui.components.glossyMetallicSurface
 import com.example.ui.theme.CardBorderSolid
 import com.example.ui.theme.CardInnerTileSolid
 import com.example.ui.theme.ExpenseCrimson
@@ -82,6 +84,8 @@ import com.example.ui.theme.IncomeEmerald
 import com.example.ui.theme.IncomeSurface
 import com.example.ui.theme.NagadAccent
 import com.example.ui.theme.NagadSurface
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonEmerald
 
 private val MONDAY_HOUR_SLOTS = listOf(9, 10, 11, 14, 16)
 
@@ -566,10 +570,9 @@ fun AiCallCenterScreen(
 
                 if (state.activeCallScript.isNotBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Surface(
+                    GlossyInnerMetricTile(
+                        accentColor = NeonCyan,
                         shape = RoundedCornerShape(12.dp),
-                        color = CardInnerTileSolid,
-                        border = BorderStroke(1.dp, CardBorderSolid),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("ai_call_script_box")
@@ -712,12 +715,15 @@ private fun LiveFreeAiCallCard(
     state: AiCallCenterUiState,
     onStop: () -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = HeroCardSolid,
-        border = BorderStroke(1.4.dp, IncomeEmerald.copy(alpha = 0.72f)),
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .glossyMetallicSurface(
+                shape = RoundedCornerShape(18.dp),
+                accentColor = NeonEmerald,
+                secondaryGlow = NeonCyan,
+                isHero = true
+            )
             .testTag("ai_call_live_banner_card")
     ) {
         Column(modifier = Modifier.padding(14.dp)) {

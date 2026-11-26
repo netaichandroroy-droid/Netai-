@@ -105,11 +105,13 @@ import com.example.ui.components.AppFrostedGlassBackground
 import com.example.ui.components.AppGlassSnackbarHost
 import com.example.ui.components.DeleteTransactionDialog
 import com.example.ui.components.GlassTopBarContainer
+import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.GlossyNeonIconOrb
 import com.example.ui.components.NetaiBrandLogoBadge
 import com.example.ui.components.StylishBottomNavBar
 import com.example.ui.components.StylishNavTab
 import com.example.ui.components.glossyMetallicSurface
+import com.example.ui.components.hisab3DFieldDepth
 import com.example.ui.components.isSuccessFeedbackMessage
 import com.example.ui.theme.BrandDeep
 import com.example.ui.theme.NeonCyan
@@ -1458,13 +1460,9 @@ private fun MemberAppLinkConfigDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = com.example.ui.theme.GlassTextSecondary
                 )
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = com.example.ui.theme.CardInnerTileSolid,
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        com.example.ui.theme.NeonCyan.copy(alpha = 0.45f)
-                    ),
+                GlossyInnerMetricTile(
+                    accentColor = com.example.ui.theme.NeonCyan,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -1516,6 +1514,7 @@ private fun MemberAppLinkConfigDialog(
                     colors = com.example.ui.components.hisabFormFieldColors(com.example.ui.theme.NeonCyan),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .hisab3DFieldDepth(com.example.ui.theme.NeonCyan)
                         .testTag("member_app_link_input")
                 )
                 if (!errorText.isNullOrBlank()) {

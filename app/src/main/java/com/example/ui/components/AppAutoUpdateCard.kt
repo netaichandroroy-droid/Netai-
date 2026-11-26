@@ -58,6 +58,7 @@ import com.example.ui.theme.IncomeEmerald
 import com.example.ui.theme.IncomeSurface
 import com.example.ui.theme.NagadAccent
 import com.example.ui.theme.NagadSurface
+import com.example.ui.theme.NeonCyan
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -164,10 +165,9 @@ fun AppAutoUpdateCard(
 
         if (updateState.statusMessage.isNotBlank() || updateState.lastCheckedAtMs > 0L) {
             Spacer(modifier = Modifier.height(10.dp))
-            Surface(
+            GlossyInnerMetricTile(
+                accentColor = if (canDownloadGitHubUpdate) IncomeEmerald else NeonCyan,
                 shape = RoundedCornerShape(12.dp),
-                color = CardInnerTileSolid,
-                border = BorderStroke(1.dp, CardBorderSolid),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -253,6 +253,7 @@ fun AppAutoUpdateCard(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
+                            .hisab3DButtonSurface(accentColor = IncomeEmerald, cornerRadius = 12.dp)
                             .testTag("complete_app_update_button")
                     ) {
                         Icon(
@@ -273,6 +274,7 @@ fun AppAutoUpdateCard(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
+                            .hisab3DButtonSurface(accentColor = IncomeEmerald, cornerRadius = 12.dp)
                             .testTag("download_github_update_button")
                     ) {
                         Icon(
@@ -307,6 +309,7 @@ fun AppAutoUpdateCard(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
+                            .hisab3DButtonSurface(accentColor = NeonCyan, cornerRadius = 12.dp)
                             .testTag("check_app_update_button")
                     ) {
                         Icon(

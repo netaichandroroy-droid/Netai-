@@ -94,8 +94,10 @@ import com.example.ui.AiVoiceUiState
 import com.example.ui.DriveUiState
 import com.example.ui.components.AppAutoUpdateCard
 import com.example.ui.components.CloudAutoSyncCard
+import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.GlossyNeonIconOrb
 import com.example.ui.components.SectionPanelCard
+import com.example.ui.components.hisab3DButtonSurface
 import com.example.ui.theme.BrandDeep
 import com.example.ui.theme.CardSurfaceSolid
 import com.example.ui.theme.ExpenseCrimson
@@ -774,6 +776,7 @@ private fun VoiceSummaryReportPanel(
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
+                        .hisab3DButtonSurface(accentColor = ExpenseCrimson, cornerRadius = 12.dp)
                         .testTag("admin_ai_voice_stop_button")
                 ) {
                     Icon(
@@ -792,6 +795,7 @@ private fun VoiceSummaryReportPanel(
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
+                        .hisab3DButtonSurface(accentColor = NeonPurple, cornerRadius = 12.dp)
                         .testTag("admin_ai_voice_speak_button")
                 ) {
                     if (aiVoiceState.isBusy) {
@@ -827,6 +831,7 @@ private fun VoiceSummaryReportPanel(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .height(48.dp)
+                        .hisab3DButtonSurface(accentColor = NeonCyan, cornerRadius = 12.dp)
                         .testTag("admin_ai_voice_replay_button")
                 ) {
                     Icon(
@@ -843,9 +848,9 @@ private fun VoiceSummaryReportPanel(
         when (val voiceStatus = aiVoiceState.status) {
             is AiVoiceStatus.Playing -> {
                 Spacer(modifier = Modifier.height(10.dp))
-                Surface(
+                GlossyInnerMetricTile(
+                    accentColor = NeonEmerald,
                     shape = RoundedCornerShape(10.dp),
-                    color = onBg,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -871,9 +876,9 @@ private fun VoiceSummaryReportPanel(
 
             is AiVoiceStatus.Error -> {
                 Spacer(modifier = Modifier.height(10.dp))
-                Surface(
+                GlossyInnerMetricTile(
+                    accentColor = ExpenseCrimson,
                     shape = RoundedCornerShape(10.dp),
-                    color = offBg,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
@@ -891,9 +896,9 @@ private fun VoiceSummaryReportPanel(
 
         if (aiVoiceState.lastScript.isNotBlank()) {
             Spacer(modifier = Modifier.height(10.dp))
-            Surface(
+            GlossyInnerMetricTile(
+                accentColor = NeonPurple,
                 shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("admin_ai_voice_transcript_box")
@@ -973,9 +978,9 @@ private fun GoogleDriveBackupPanel(
 
         if (driveState.isConnected) {
             Spacer(modifier = Modifier.height(10.dp))
-            Surface(
+            GlossyInnerMetricTile(
+                accentColor = NeonEmerald,
                 shape = RoundedCornerShape(12.dp),
-                color = onBg.copy(alpha = 0.7f),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -1113,9 +1118,9 @@ private fun GoogleDriveBackupPanel(
         } else {
             if (!driveAuthBlockedEmail.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(10.dp))
-                Surface(
+                GlossyInnerMetricTile(
+                    accentColor = ExpenseCrimson,
                     shape = RoundedCornerShape(12.dp),
-                    color = offBg,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onShowDriveAccessHelp)

@@ -63,6 +63,8 @@ import com.example.model.TxType
 import com.example.ui.components.GlossyFormSectionHeader
 import com.example.ui.components.GlossyNeonIconOrb
 import com.example.ui.components.SectionPanelCard
+import com.example.ui.components.hisab3DButtonSurface
+import com.example.ui.components.hisab3DFieldDepth
 import com.example.ui.components.hisabFilterChipBorder
 import com.example.ui.components.hisabFilterChipColors
 import com.example.ui.components.hisabFormFieldColors
@@ -364,6 +366,7 @@ fun OnlinePaymentScreen(
                         colors = hisabFormFieldColors(accentColor = NeonCyan),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .hisab3DFieldDepth(accentColor = NeonCyan)
                             .testTag("online_payment_amount_input")
                     )
 
@@ -378,6 +381,7 @@ fun OnlinePaymentScreen(
                         colors = hisabFormFieldColors(accentColor = NeonCyan),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .hisab3DFieldDepth(accentColor = NeonCyan)
                             .testTag("online_payment_note_input")
                     )
 
@@ -419,6 +423,7 @@ fun OnlinePaymentScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
+                            .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 14.dp)
                             .testTag("record_online_payment_button")
                     ) {
                         Text("Save Transaction", fontWeight = FontWeight.Bold)
@@ -478,7 +483,9 @@ private fun EditPaymentAccountDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     shape = RoundedCornerShape(12.dp),
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                 )
 
                 OutlinedTextField(
@@ -496,7 +503,9 @@ private fun EditPaymentAccountDialog(
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     colors = hisabFormFieldColors(accentColor = NeonCyan),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .hisab3DFieldDepth(accentColor = NeonCyan)
                 )
 
                 Row(

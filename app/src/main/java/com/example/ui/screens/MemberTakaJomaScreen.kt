@@ -109,6 +109,7 @@ import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.GlossyNeonIconOrb
 import com.example.ui.components.TakaJomaStatusPill
 import com.example.ui.components.glossyMetallicSurface
+import com.example.ui.components.hisab3DFieldDepth
 import com.example.ui.components.hisabFilterChipBorder
 import com.example.ui.components.hisabFilterChipColors
 import com.example.ui.components.hisabFormFieldColors
@@ -814,15 +815,15 @@ fun MemberTakaJomaScreen(
                                 colors = takaJoma3DTextFieldColors(),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .hisab3DFieldDepth(accentColor = NeonCyan, cornerRadius = 10.dp)
                                     .testTag("taka_joma_bank_search_input")
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            Surface(
+                            GlossyInnerMetricTile(
+                                accentColor = NeonCyan,
                                 shape = RoundedCornerShape(10.dp),
-                                color = CardSurfaceSolid,
-                                border = BorderStroke(0.9.dp, MetallicSilverRim.copy(alpha = 0.30f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(240.dp)
@@ -999,10 +1000,9 @@ fun MemberTakaJomaScreen(
 
                 if (!formError.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
+                    GlossyInnerMetricTile(
+                        accentColor = ExpenseCrimson,
                         shape = RoundedCornerShape(10.dp),
-                        color = ExpenseCrimson.copy(alpha = 0.16f),
-                        border = BorderStroke(1.dp, ExpenseCrimson.copy(alpha = 0.55f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
@@ -1322,9 +1322,12 @@ private fun TakaJoma3DPanelCard(
 @Composable
 private fun TakaJoma3DFieldShell(
     modifier: Modifier = Modifier,
+    accentColor: Color = NeonCyan,
     content: @Composable () -> Unit
 ) {
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier.hisab3DFieldDepth(accentColor = accentColor)
+    ) {
         content()
     }
 }
