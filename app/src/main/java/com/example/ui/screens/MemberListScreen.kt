@@ -4,11 +4,15 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +37,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ContactPhone
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
@@ -42,7 +50,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -86,6 +93,7 @@ import com.example.ui.components.GlassCardSurface
 import com.example.ui.components.GlossyFormSectionHeader
 import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.GlossyNeonIconOrb
+import com.example.ui.components.glossyMetallicSurface
 import com.example.ui.components.hisab3DButtonSurface
 import com.example.ui.components.hisab3DFieldDepth
 import com.example.ui.components.hisabFilterChipBorder
@@ -95,14 +103,14 @@ import com.example.ui.theme.BrandHeroStart
 import com.example.ui.theme.CardInnerTileSolid
 import com.example.ui.theme.CardSurfaceSolid
 import com.example.ui.theme.ExpenseCrimson
-import com.example.ui.theme.ExpenseSurface
 import com.example.ui.theme.GlassTextPrimary
 import com.example.ui.theme.GlassTextSecondary
 import com.example.ui.theme.IncomeEmerald
-import com.example.ui.theme.IncomeSurface
 import com.example.ui.theme.MetallicSilverRim
+import com.example.ui.theme.NeonBlue
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonEmerald
+import com.example.ui.theme.NeonPurple
 
 @Composable
 fun MemberListScreen(
@@ -585,196 +593,232 @@ private fun MemberProfileDetailSheet(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 14.dp)
+                .padding(bottom = 24.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                MemberAvatarView(
-                    name = member.name,
-                    photoPath = member.profilePhotoPath,
-                    size = 60.dp
-                )
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = member.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = GlassTextPrimary
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glossyMetallicSurface(
+                        shape = RoundedCornerShape(22.dp),
+                        accentColor = NeonCyan,
+                        secondaryGlow = NeonEmerald,
+                        borderWidth = 1.5.dp,
+                        isHero = true
                     )
-                    val profileMeta = listOfNotNull(
-                        member.designation.takeIf { it.isNotBlank() },
-                        member.depot.takeIf { it.isNotBlank() }
-                    ).joinToString(" • ")
-                    if (profileMeta.isNotBlank()) {
-                        Text(
-                            text = profileMeta,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = GlassTextSecondary
-                        )
-                    }
-                }
-                Switch(
-                    checked = member.isActive,
-                    onCheckedChange = onToggleActive
-                )
-            }
-
-            HorizontalDivider(color = MetallicSilverRim.copy(alpha = 0.22f))
-
-            ProfileSheetFieldRow("Code (Login ID)", member.code.ifBlank { "-" })
-            ProfileSheetFieldRow(
-                "Password",
-                if (member.isDefaultPassword) {
-                    if (member.code.isNotBlank()) "${member.code} (Default)" else "Code not set"
-                } else {
-                    "Changed by member"
-                }
-            )
-            ProfileSheetFieldRow("Desig:", member.designation.ifBlank { "-" })
-            ProfileSheetFieldRow("Area", member.area.ifBlank { "-" })
-            ProfileSheetFieldRow("Depot", member.depot.ifBlank { "-" })
-            ProfileSheetFieldRow("Phone", member.phone.ifBlank { "-" })
-            ProfileSheetFieldRow("Email", member.email.ifBlank { "-" })
-            ProfileSheetFieldRow("Address", member.address.ifBlank { "-" })
-            ProfileSheetFieldRow("Sales", BanglaFormatters.formatBdt(member.salesAmount))
-            ProfileSheetFieldRow(
-                "Joining Date",
-                if (member.joiningDate.isNotBlank()) BanglaFormatters.formatBanglaDate(member.joiningDate) else "-"
-            )
-
-            GlossyInnerMetricTile(
-                accentColor = NeonCyan,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "Member App Link",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = NeonCyan
-                    )
-                    Text(
-                        text = inviteText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = GlassTextPrimary
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        MemberAvatarView(
+                            name = member.name,
+                            photoPath = member.profilePhotoPath,
+                            size = 60.dp
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = member.name,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = GlassTextPrimary
+                            )
+                            val profileMeta = listOfNotNull(
+                                member.designation.takeIf { it.isNotBlank() },
+                                member.depot.takeIf { it.isNotBlank() }
+                            ).joinToString(" • ")
+                            if (profileMeta.isNotBlank()) {
+                                Text(
+                                    text = profileMeta,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = GlassTextSecondary
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = member.isActive,
+                            onCheckedChange = onToggleActive
+                        )
+                    }
+
+                    GlossyInnerMetricTile(
+                        accentColor = NeonBlue,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            ProfileSheetFieldRow("Code (Login ID)", member.code.ifBlank { "-" })
+                            ProfileSheetFieldRow(
+                                "Password",
+                                if (member.isDefaultPassword) {
+                                    if (member.code.isNotBlank()) "${member.code} (Default)" else "Code not set"
+                                } else {
+                                    "Changed by member"
+                                }
+                            )
+                            ProfileSheetFieldRow("Desig:", member.designation.ifBlank { "-" })
+                            ProfileSheetFieldRow("Area", member.area.ifBlank { "-" })
+                            ProfileSheetFieldRow("Depot", member.depot.ifBlank { "-" })
+                            ProfileSheetFieldRow("Phone", member.phone.ifBlank { "-" })
+                            ProfileSheetFieldRow("Email", member.email.ifBlank { "-" })
+                            ProfileSheetFieldRow("Address", member.address.ifBlank { "-" })
+                            ProfileSheetFieldRow("Sales", BanglaFormatters.formatBdt(member.salesAmount))
+                            ProfileSheetFieldRow(
+                                "Joining Date",
+                                if (member.joiningDate.isNotBlank()) BanglaFormatters.formatBanglaDate(member.joiningDate) else "-"
+                            )
+                        }
+                    }
+
+                    GlossyInnerMetricTile(
+                        accentColor = NeonCyan,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Member App Link",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = NeonCyan
+                            )
+                            Text(
+                                text = inviteText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GlassTextPrimary
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                        cm?.setPrimaryClip(ClipData.newPlainText("Member Login Link", inviteText))
+                                        linkStatusMessage = "Link and login details copied"
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = CardInnerTileSolid,
+                                        contentColor = GlassTextPrimary
+                                    ),
+                                    border = BorderStroke(1.dp, MetallicSilverRim.copy(alpha = 0.40f)),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .hisab3DButtonSurface(accentColor = NeonCyan, cornerRadius = 10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ContentCopy,
+                                        contentDescription = null,
+                                        tint = NeonCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Copy")
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, inviteText)
+                                        }
+                                        val chooser = Intent.createChooser(shareIntent, "Share Member Link").apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(chooser)
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = CardInnerTileSolid,
+                                        contentColor = GlassTextPrimary
+                                    ),
+                                    border = BorderStroke(1.dp, MetallicSilverRim.copy(alpha = 0.40f)),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .hisab3DButtonSurface(accentColor = NeonEmerald, cornerRadius = 10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Share,
+                                        contentDescription = null,
+                                        tint = NeonEmerald,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Share")
+                                }
+                            }
+                            if (!linkStatusMessage.isNullOrBlank()) {
+                                Text(
+                                    text = linkStatusMessage ?: "",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = NeonCyan
+                                )
+                            }
+                        }
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedButton(
-                            onClick = {
-                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                cm?.setPrimaryClip(ClipData.newPlainText("Member Login Link", inviteText))
-                                linkStatusMessage = "Link and login details copied"
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = CardInnerTileSolid,
-                                contentColor = GlassTextPrimary
+                        Button(
+                            onClick = onEdit,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BrandHeroStart,
+                                contentColor = Color.White
                             ),
-                            border = BorderStroke(1.dp, MetallicSilverRim.copy(alpha = 0.40f)),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
+                                .hisab3DButtonSurface(accentColor = NeonCyan, cornerRadius = 12.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.ContentCopy,
+                                imageVector = Icons.Outlined.Edit,
                                 contentDescription = null,
-                                tint = NeonCyan,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Copy")
+                            Text("Edit", fontWeight = FontWeight.Bold)
                         }
-                        OutlinedButton(
-                            onClick = {
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, inviteText)
-                                }
-                                val chooser = Intent.createChooser(shareIntent, "Share Member Link").apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                context.startActivity(chooser)
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = CardInnerTileSolid,
-                                contentColor = GlassTextPrimary
-                            ),
-                            border = BorderStroke(1.dp, MetallicSilverRim.copy(alpha = 0.40f)),
-                            modifier = Modifier.weight(1f)
+                        TextButton(
+                            onClick = onDelete,
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.Share,
+                                imageVector = Icons.Outlined.DeleteOutline,
                                 contentDescription = null,
-                                tint = NeonEmerald,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Share")
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Delete")
                         }
                     }
-                    if (!linkStatusMessage.isNullOrBlank()) {
-                        Text(
-                            text = linkStatusMessage ?: "",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = NeonCyan
-                        )
+
+                    if (!member.isDefaultPassword && member.code.isNotBlank() && onResetPassword != null) {
+                        TextButton(
+                            onClick = {
+                                onResetPassword()
+                                onDismiss()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Reset Password to Default (${member.code})")
+                        }
                     }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = onEdit,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Edit")
-                }
-                TextButton(
-                    onClick = onDelete,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.DeleteOutline,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Delete")
-                }
-            }
-
-            if (!member.isDefaultPassword && member.code.isNotBlank() && onResetPassword != null) {
-                TextButton(
-                    onClick = {
-                        onResetPassword()
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Reset Password to Default (${member.code})")
                 }
             }
         }
@@ -848,322 +892,420 @@ internal fun MemberEditorModalSheet(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 14.dp)
                 .padding(bottom = 24.dp)
         ) {
-            GlossyFormSectionHeader(
-                icon = Icons.Outlined.Groups,
-                title = if (editingMember == null) "Add New Member" else "Edit Member Profile",
-                subtitle = if (editingMember == null) "Create Login Code & Profile" else "Update Details",
-                glowColor = NeonCyan
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            OutlinedTextField(
-                value = code,
-                onValueChange = {
-                    code = it
-                    errorMessage = null
-                },
-                label = { Text("Code (Login ID & Default Password)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                shape = RoundedCornerShape(12.dp),
-                colors = hisabFormFieldColors(accentColor = NeonCyan),
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .hisab3DFieldDepth(accentColor = NeonCyan)
-                    .testTag("member_code_input")
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = name,
-                onValueChange = {
-                    name = it
-                    errorMessage = null
-                },
-                label = { Text("Name") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                shape = RoundedCornerShape(12.dp),
-                colors = hisabFormFieldColors(accentColor = NeonCyan),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hisab3DFieldDepth(accentColor = NeonCyan)
-                    .testTag("member_name_input")
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = designation,
-                onValueChange = {
-                    designation = it
-                    errorMessage = null
-                },
-                label = { Text("Designation") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                shape = RoundedCornerShape(12.dp),
-                colors = hisabFormFieldColors(accentColor = NeonCyan),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hisab3DFieldDepth(accentColor = NeonCyan)
-                    .testTag("member_designation_input")
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    .glossyMetallicSurface(
+                        shape = RoundedCornerShape(22.dp),
+                        accentColor = NeonCyan,
+                        secondaryGlow = NeonEmerald,
+                        borderWidth = 1.5.dp,
+                        isHero = true
+                    )
             ) {
-                listOf("MPO", "AM", "RSC", "RSM", "ASM").forEach { roleChip ->
-                    val isPicked = designation.trim().equals(roleChip, ignoreCase = true)
-                    FilterChip(
-                        selected = isPicked,
-                        onClick = {
-                            designation = roleChip
-                            errorMessage = null
-                        },
-                        label = { Text(roleChip) },
-                        colors = hisabFilterChipColors(accentColor = NeonCyan),
-                        border = hisabFilterChipBorder(selected = isPicked, accentColor = NeonCyan),
-                        modifier = Modifier.testTag("member_designation_chip_${roleChip.lowercase()}")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    GlossyFormSectionHeader(
+                        icon = Icons.Outlined.Groups,
+                        title = if (editingMember == null) "Add New Member" else "Edit Member Profile",
+                        subtitle = if (editingMember == null) "Create Login Code & Profile" else "Update Details",
+                        glowColor = NeonCyan
                     )
-                }
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = area,
-                onValueChange = {
-                    area = it
-                    errorMessage = null
-                },
-                label = { Text("Area") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                shape = RoundedCornerShape(12.dp),
-                colors = hisabFormFieldColors(accentColor = NeonCyan),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hisab3DFieldDepth(accentColor = NeonCyan)
-                    .testTag("member_area_input")
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = depot,
-                onValueChange = {
-                    depot = it
-                    errorMessage = null
-                },
-                label = { Text("Depot") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                shape = RoundedCornerShape(12.dp),
-                colors = hisabFormFieldColors(accentColor = NeonCyan),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hisab3DFieldDepth(accentColor = NeonCyan)
-                    .testTag("member_depot_input")
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = phone,
-                onValueChange = {
-                    phone = it
-                    errorMessage = null
-                },
-                label = { Text("Phone (Optional)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Phone,
-                    imeAction = ImeAction.Next
-                ),
-                shape = RoundedCornerShape(12.dp),
-                colors = hisabFormFieldColors(accentColor = NeonCyan),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hisab3DFieldDepth(accentColor = NeonCyan)
-                    .testTag("member_phone_input")
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email (Optional)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Email,
-                    imeAction = ImeAction.Next
-                ),
-                shape = RoundedCornerShape(12.dp),
-                colors = hisabFormFieldColors(accentColor = NeonCyan),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hisab3DFieldDepth(accentColor = NeonCyan)
-                    .testTag("member_email_input")
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = address,
-                onValueChange = { address = it },
-                label = { Text("Address (Optional)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                shape = RoundedCornerShape(12.dp),
-                colors = hisabFormFieldColors(accentColor = NeonCyan),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hisab3DFieldDepth(accentColor = NeonCyan)
-                    .testTag("member_address_input")
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = joiningDate,
-                onValueChange = { joiningDate = it },
-                label = { Text("Joining Date (YYYY-MM-DD)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                shape = RoundedCornerShape(12.dp),
-                colors = hisabFormFieldColors(accentColor = NeonCyan),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hisab3DFieldDepth(accentColor = NeonCyan)
-                    .testTag("member_joining_date_input")
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "Active Status",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = GlassTextPrimary
-                    )
-                    Text(
-                        text = if (isActive) "Active (ON)" else "Inactive (OFF)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = GlassTextSecondary
-                    )
-                }
-                Switch(
-                    checked = isActive,
-                    onCheckedChange = { isActive = it },
-                    modifier = Modifier.testTag("member_editor_active_switch")
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            val previewCredential = code.trim().ifBlank { "Member Code" }
-            GlossyInnerMetricTile(
-                accentColor = NeonEmerald,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "Member App Login Credentials",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = IncomeEmerald
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Login ID: $previewCredential  •  Password: $previewCredential",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = GlassTextPrimary
-                    )
-                    if (editingMember != null && !editingMember.isDefaultPassword && code.isNotBlank() && onResetPassword != null) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        TextButton(
-                            onClick = {
-                                onResetPassword(editingMember)
-                                onDismiss()
-                            },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.testTag("reset_member_password_button")
+                    // 3D Card 1: Member Identity & Assignment
+                    GlossyInnerMetricTile(
+                        accentColor = NeonCyan,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text("Reset Password to Default ($previewCredential)")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Badge,
+                                    contentDescription = null,
+                                    tint = NeonCyan,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Identity & Role",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NeonCyan
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = code,
+                                onValueChange = {
+                                    code = it
+                                    errorMessage = null
+                                },
+                                label = { Text("Code (Login ID & Default Password)") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = hisabFormFieldColors(accentColor = NeonCyan),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .hisab3DFieldDepth(accentColor = NeonCyan)
+                                    .testTag("member_code_input")
+                            )
+
+                            OutlinedTextField(
+                                value = name,
+                                onValueChange = {
+                                    name = it
+                                    errorMessage = null
+                                },
+                                label = { Text("Name") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = hisabFormFieldColors(accentColor = NeonCyan),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .hisab3DFieldDepth(accentColor = NeonCyan)
+                                    .testTag("member_name_input")
+                            )
+
+                            OutlinedTextField(
+                                value = designation,
+                                onValueChange = {
+                                    designation = it
+                                    errorMessage = null
+                                },
+                                label = { Text("Designation") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = hisabFormFieldColors(accentColor = NeonCyan),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .hisab3DFieldDepth(accentColor = NeonCyan)
+                                    .testTag("member_designation_input")
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                listOf("MPO", "AM", "RSC", "RSM", "ASM").forEach { roleChip ->
+                                    val isPicked = designation.trim().equals(roleChip, ignoreCase = true)
+                                    FilterChip(
+                                        selected = isPicked,
+                                        onClick = {
+                                            designation = roleChip
+                                            errorMessage = null
+                                        },
+                                        label = { Text(roleChip) },
+                                        colors = hisabFilterChipColors(accentColor = NeonCyan),
+                                        border = hisabFilterChipBorder(selected = isPicked, accentColor = NeonCyan),
+                                        modifier = Modifier.testTag("member_designation_chip_${roleChip.lowercase()}")
+                                    )
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = area,
+                                onValueChange = {
+                                    area = it
+                                    errorMessage = null
+                                },
+                                label = { Text("Area") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = hisabFormFieldColors(accentColor = NeonCyan),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .hisab3DFieldDepth(accentColor = NeonCyan)
+                                    .testTag("member_area_input")
+                            )
+
+                            OutlinedTextField(
+                                value = depot,
+                                onValueChange = {
+                                    depot = it
+                                    errorMessage = null
+                                },
+                                label = { Text("Depot") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = hisabFormFieldColors(accentColor = NeonCyan),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .hisab3DFieldDepth(accentColor = NeonCyan)
+                                    .testTag("member_depot_input")
+                            )
+                        }
+                    }
+
+                    // 3D Card 2: Contact, Joining & Active Status
+                    GlossyInnerMetricTile(
+                        accentColor = NeonPurple,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContactPhone,
+                                    contentDescription = null,
+                                    tint = NeonPurple,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Contact & Status",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NeonPurple
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = phone,
+                                onValueChange = {
+                                    phone = it
+                                    errorMessage = null
+                                },
+                                label = { Text("Phone (Optional)") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Phone,
+                                    imeAction = ImeAction.Next
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = hisabFormFieldColors(accentColor = NeonPurple),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .hisab3DFieldDepth(accentColor = NeonPurple)
+                                    .testTag("member_phone_input")
+                            )
+
+                            OutlinedTextField(
+                                value = email,
+                                onValueChange = { email = it },
+                                label = { Text("Email (Optional)") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Email,
+                                    imeAction = ImeAction.Next
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = hisabFormFieldColors(accentColor = NeonPurple),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .hisab3DFieldDepth(accentColor = NeonPurple)
+                                    .testTag("member_email_input")
+                            )
+
+                            OutlinedTextField(
+                                value = address,
+                                onValueChange = { address = it },
+                                label = { Text("Address (Optional)") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = hisabFormFieldColors(accentColor = NeonPurple),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .hisab3DFieldDepth(accentColor = NeonPurple)
+                                    .testTag("member_address_input")
+                            )
+
+                            OutlinedTextField(
+                                value = joiningDate,
+                                onValueChange = { joiningDate = it },
+                                label = { Text("Joining Date (YYYY-MM-DD)") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = hisabFormFieldColors(accentColor = NeonPurple),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .hisab3DFieldDepth(accentColor = NeonPurple)
+                                    .testTag("member_joining_date_input")
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Active Status",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = GlassTextPrimary
+                                    )
+                                    Text(
+                                        text = if (isActive) "Active (ON)" else "Inactive (OFF)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = GlassTextSecondary
+                                    )
+                                }
+                                Switch(
+                                    checked = isActive,
+                                    onCheckedChange = { isActive = it },
+                                    modifier = Modifier.testTag("member_editor_active_switch")
+                                )
+                            }
+                        }
+                    }
+
+                    // 3D Card 3: Login Credentials Preview
+                    val previewCredential = code.trim().ifBlank { "Member Code" }
+                    GlossyInnerMetricTile(
+                        accentColor = NeonEmerald,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "Member App Login Credentials",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = IncomeEmerald
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Login ID: $previewCredential  •  Password: $previewCredential",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GlassTextPrimary
+                            )
+                            if (editingMember != null && !editingMember.isDefaultPassword && code.isNotBlank() && onResetPassword != null) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                TextButton(
+                                    onClick = {
+                                        onResetPassword(editingMember)
+                                        onDismiss()
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.testTag("reset_member_password_button")
+                                ) {
+                                    Text("Reset Password to Default ($previewCredential)")
+                                }
+                            }
+                        }
+                    }
+
+                    if (!errorMessage.isNullOrBlank()) {
+                        GlossyInnerMetricTile(
+                            accentColor = ExpenseCrimson,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = errorMessage ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ExpenseCrimson,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
+                            )
+                        }
+                    }
+
+                    // 3D Tactile Push Button
+                    val saveInteraction = remember { MutableInteractionSource() }
+                    val isSavePressed by saveInteraction.collectIsPressedAsState()
+                    val savePressOffset by animateDpAsState(
+                        targetValue = if (isSavePressed) 3.dp else 0.dp,
+                        animationSpec = spring(stiffness = 750f),
+                        label = "member_save_3d_press"
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .offset(y = 4.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFF06162E))
+                        )
+                        Button(
+                            onClick = {
+                                if (code.isBlank()) {
+                                    errorMessage = "Please enter member code."
+                                    return@Button
+                                }
+                                if (name.isBlank()) {
+                                    errorMessage = "Please enter member name."
+                                    return@Button
+                                }
+                                onSave(
+                                    editingMember?.id,
+                                    code,
+                                    name,
+                                    designation,
+                                    area,
+                                    phone,
+                                    depot,
+                                    isActive,
+                                    email,
+                                    address,
+                                    joiningDate
+                                )
+                            },
+                            interactionSource = saveInteraction,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BrandHeroStart,
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .offset(y = savePressOffset)
+                                .hisab3DButtonSurface(accentColor = NeonCyan, cornerRadius = 14.dp)
+                                .testTag("save_member_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(19.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (editingMember == null) "Save Member" else "Update Member",
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
-            }
-
-            if (!errorMessage.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = errorMessage ?: "",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ExpenseCrimson
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    if (code.isBlank()) {
-                        errorMessage = "Please enter member code."
-                        return@Button
-                    }
-                    if (name.isBlank()) {
-                        errorMessage = "Please enter member name."
-                        return@Button
-                    }
-                    onSave(
-                        editingMember?.id,
-                        code,
-                        name,
-                        designation,
-                        area,
-                        phone,
-                        depot,
-                        isActive,
-                        email,
-                        address,
-                        joiningDate
-                    )
-                },
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = BrandHeroStart,
-                    contentColor = Color.White
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 14.dp)
-                    .testTag("save_member_button")
-            ) {
-                Text(
-                    text = if (editingMember == null) "Save Member" else "Update Member",
-                    fontWeight = FontWeight.Bold
-                )
             }
         }
     }
