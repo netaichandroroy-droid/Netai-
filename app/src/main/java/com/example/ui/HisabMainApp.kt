@@ -226,6 +226,9 @@ fun HisabMainApp(
 
     LaunchedEffect(
         aiCallCenterState.autoCallMondayEnabled,
+        aiCallCenterState.enabledDays,
+        aiCallCenterState.scheduledHour,
+        aiCallCenterState.scheduledMinute,
         aiCallCenterState.isMondayToday,
         aiCallCenterState.dueQueue.size
     ) {
@@ -237,6 +240,7 @@ fun HisabMainApp(
 
     LaunchedEffect(
         aiCallCenterState.autoCallMondayEnabled,
+        aiCallCenterState.enabledDays,
         aiCallCenterState.scheduledHour,
         aiCallCenterState.scheduledMinute
     ) {
@@ -1212,7 +1216,9 @@ fun HisabMainApp(
                             SettingsSubPage.AI_CALL_CENTER -> AiCallCenterScreen(
                                 state = aiCallCenterState,
                                 onToggleMondayAutoCall = viewModel::setMondayAutoCallEnabled,
+                                onToggleCallDay = viewModel::toggleAiCallDay,
                                 onSelectCallHour = viewModel::setMondayCallHour,
+                                onUpdateCallTime = viewModel::setMondayCallTime,
                                 onToggleAutoVoice = viewModel::setAiCallAutoVoice,
                                 onToggleAlsoDialPhone = viewModel::setAiCallAlsoDialPhone,
                                 onSelectVoice = viewModel::selectAiCallVoiceOption,

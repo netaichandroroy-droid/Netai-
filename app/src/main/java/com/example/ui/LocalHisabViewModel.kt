@@ -18,6 +18,8 @@ import com.example.data.AiCallCenterPrefsStore
 import com.example.data.AiCallRecord
 import com.example.data.AiCallScheduleConfig
 import com.example.data.AiCallStatus
+import com.example.data.CallScheduleDay
+import java.util.Calendar
 import com.example.data.BackupExporter
 import com.example.data.CloudAutoSyncRepository
 import com.example.data.CloudSyncPrefsStore
@@ -123,13 +125,14 @@ data class AiVoiceUiState(
 
 data class AiCallCenterUiState(
     val autoCallMondayEnabled: Boolean = true,
+    val enabledDays: Set<Int> = setOf(Calendar.MONDAY),
     val scheduledHour: Int = 10,
     val scheduledMinute: Int = 0,
     val autoVoiceGreeting: Boolean = true,
     val alsoDialPhoneNumber: Boolean = false,
     val selectedVoice: FemaleAiVoiceOption = FemaleAiVoiceOption.AOEDE,
-    val isMondayToday: Boolean = AiCallCenterPrefsStore.isMonday(),
-    val nextScheduleLabel: String = AiCallCenterPrefsStore.formatNextMondayLabel(10, 0),
+    val isMondayToday: Boolean = AiCallCenterPrefsStore.isDayEnabled(setOf(Calendar.MONDAY)),
+    val nextScheduleLabel: String = AiCallCenterPrefsStore.formatNextScheduleLabel(setOf(Calendar.MONDAY), 10, 0),
     val dueQueue: List<AiCallQueueItem> = emptyList(),
     val activeMemberId: String? = null,
     val activeCallScript: String = "",
@@ -1797,15 +1800,18 @@ class LocalHisabViewModel(
         _aiCallCenterState.update { current ->
             current.copy(
                 autoCallMondayEnabled = config.autoCallMondayEnabled,
+                enabledDays = config.enabledDays,
                 scheduledHour = config.scheduledHour,
                 scheduledMinute = config.scheduledMinute,
                 autoVoiceGreeting = config.autoVoiceGreeting,
                 alsoDialPhoneNumber = config.alsoDialPhoneNumber,
                 selectedVoice = config.selectedVoice,
-                isMondayToday = AiCallCenterPrefsStore.isMonday(),
-                nextScheduleLabel = AiCallCenterPrefsStore.formatNextMondayLabel(
-                    config.scheduledHour,
-                    config.scheduledMinute
+                isMondayToday = AiCallCenterPrefsStore.isDayEnabled(config.enabledDays),
+                nextScheduleLabel = AiCallCenterPrefsStore.formatNextScheduleLabel(
+                    enabledDays = config.enabledDays,
+                    hour = config.scheduledHour,
+                    minute = config.scheduledMinute,
+                    autoEnabled = config.autoCallMondayEnabled
                 ),
                 dueQueue = queue
             )
@@ -1815,19 +1821,73 @@ class LocalHisabViewModel(
     fun setMondayAutoCallEnabled(enabled: Boolean) {
         if (!isAdminSession) return
         val current = aiCallCenterPrefs?.loadConfig() ?: AiCallScheduleConfig()
-        aiCallCenterPrefs?.saveConfig(current.copy(autoCallMondayEnabled = enabled))
+        val updatedDays = if (enabled && current.enabledDays.isEmpty()) {
+            setOf(AiCallCenterPrefsStore.todayDayOfWeek())
+        } else {
+            current.enabledDays
+        }
+        aiCallCenterPrefs?.saveConfig(
+            current.copy(
+                autoCallMondayEnabled = enabled,
+                enabledDays = updatedDays
+            )
+        )
+        if (enabled) {
+            aiCallCenterPrefs?.clearRunMarkersForUpdatedSchedule()
+        }
         refreshAiCallCenterQueue()
+        val daysSummary = AiCallCenterPrefsStore.formatEnabledDaysSummary(updatedDays)
         showMessage(
-            if (enabled) "Monday free AI auto-call enabled"
-            else "Monday free AI auto-call paused"
+            if (enabled) "Auto-call enabled ($daysSummary)"
+            else "Scheduled AI auto-call paused"
+        )
+    }
+
+    fun toggleAiCallDay(calendarDay: Int) {
+        if (!isAdminSession) return
+        val current = aiCallCenterPrefs?.loadConfig() ?: AiCallScheduleConfig()
+        val wasEnabled = calendarDay in current.enabledDays
+        val updatedDays = if (wasEnabled) {
+            current.enabledDays - calendarDay
+        } else {
+            current.enabledDays + calendarDay
+        }
+        val nextAutoEnabled = updatedDays.isNotEmpty()
+        aiCallCenterPrefs?.saveConfig(
+            current.copy(
+                autoCallMondayEnabled = nextAutoEnabled,
+                enabledDays = updatedDays
+            )
+        )
+        if (!wasEnabled && calendarDay == AiCallCenterPrefsStore.todayDayOfWeek()) {
+            aiCallCenterPrefs?.clearRunMarkersForUpdatedSchedule()
+        }
+        refreshAiCallCenterQueue()
+        val dayName = CallScheduleDay.fromCalendarDay(calendarDay)?.fullLabel ?: "Day"
+        showMessage(
+            if (!wasEnabled) "$dayName auto-call ON (${AiCallCenterPrefsStore.formatTimeSlot(current.scheduledHour, current.scheduledMinute)})"
+            else "$dayName auto-call OFF"
         )
     }
 
     fun setMondayCallHour(hour: Int) {
+        setMondayCallTime(hour = hour, minute = 0)
+    }
+
+    fun setMondayCallTime(hour: Int, minute: Int) {
         if (!isAdminSession) return
         val current = aiCallCenterPrefs?.loadConfig() ?: AiCallScheduleConfig()
-        aiCallCenterPrefs?.saveConfig(current.copy(scheduledHour = hour.coerceIn(7, 21)))
+        val cleanHour = hour.coerceIn(0, 23)
+        val cleanMinute = minute.coerceIn(0, 59)
+        aiCallCenterPrefs?.saveConfig(
+            current.copy(
+                scheduledHour = cleanHour,
+                scheduledMinute = cleanMinute
+            )
+        )
+        aiCallCenterPrefs?.clearRunMarkersForUpdatedSchedule()
         refreshAiCallCenterQueue()
+        showMessage("Call time updated to ${AiCallCenterPrefsStore.formatTimeSlot(cleanHour, cleanMinute)}")
     }
 
     fun setAiCallAutoVoice(enabled: Boolean) {
@@ -1889,8 +1949,9 @@ class LocalHisabViewModel(
         }
         if (targets.isEmpty()) return
 
-        val cycleKey = AiCallCenterPrefsStore.currentCycleKey()
-        aiCallCenterPrefs?.setLastRunMondayKey(cycleKey)
+        val currentConfig = aiCallCenterPrefs?.loadConfig() ?: AiCallScheduleConfig()
+        val slotKey = AiCallCenterPrefsStore.scheduleSlotKey(currentConfig)
+        aiCallCenterPrefs?.setLastRunMondayKey(slotKey)
         aiCallCenterPrefs?.setPendingAutoStartMondayKey("")
 
         val voiceOption = _aiCallCenterState.value.selectedVoice
@@ -1948,7 +2009,7 @@ class LocalHisabViewModel(
                             _aiCallCenterState.update {
                                 it.copy(
                                     progressMessage = msg,
-                                    activeCallPhaseLabel = "${voiceOption.agentName} (Female AI) Connecting..."
+                                    activeCallPhaseLabel = "${voiceOption.agentName} (${voiceOption.genderLabel}) Connecting..."
                                 )
                             }
                         }
@@ -1986,8 +2047,8 @@ class LocalHisabViewModel(
                             isGeneratingVoice = false,
                             isPlayingVoice = true,
                             activeCallScript = generated.script,
-                            activeCallPhaseLabel = "${voiceOption.agentName} (Female AI) Speaking...",
-                            progressMessage = "${voiceOption.agentName} (Female) speaking to ${item.memberName}..."
+                            activeCallPhaseLabel = "${voiceOption.agentName} (${voiceOption.genderLabel}) Speaking...",
+                            progressMessage = "${voiceOption.agentName} (${voiceOption.genderLabel}) speaking to ${item.memberName}..."
                         )
                     }
 
@@ -2030,7 +2091,7 @@ class LocalHisabViewModel(
                         activeCallMemberPhone = "",
                         activeCallDuesAmount = 0.0,
                         activeCallPhaseLabel = "",
-                        progressMessage = "Completed $completedCalls free female AI call(s) successfully."
+                        progressMessage = "Completed $completedCalls free ${voiceOption.genderLabel} call(s) successfully."
                     )
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -2093,7 +2154,7 @@ class LocalHisabViewModel(
                     _aiCallCenterState.update {
                         it.copy(
                             progressMessage = msg,
-                            activeCallPhaseLabel = "${voiceOption.agentName} (Female AI) Connecting..."
+                            activeCallPhaseLabel = "${voiceOption.agentName} (${voiceOption.genderLabel}) Connecting..."
                         )
                     }
                 }
@@ -2105,8 +2166,8 @@ class LocalHisabViewModel(
                         isGeneratingVoice = false,
                         isPlayingVoice = true,
                         activeCallScript = generated.script,
-                        activeCallPhaseLabel = "${voiceOption.agentName} (Female AI) Speaking...",
-                        progressMessage = "${voiceOption.agentName} (Female) speaking to ${item.memberName}..."
+                        activeCallPhaseLabel = "${voiceOption.agentName} (${voiceOption.genderLabel}) Speaking...",
+                        progressMessage = "${voiceOption.agentName} (${voiceOption.genderLabel}) speaking to ${item.memberName}..."
                     )
                 }
                 aiVoiceAssistant.playPcmAudio(generated.audioBytes, generated.mimeType)
@@ -2129,7 +2190,7 @@ class LocalHisabViewModel(
                         isPlayingVoice = false,
                         activeMemberId = null,
                         activeCallPhaseLabel = "",
-                        progressMessage = "Free female AI call completed for ${item.memberName}."
+                        progressMessage = "Free ${voiceOption.genderLabel} call completed for ${item.memberName}."
                     )
                 }
             }.onFailure { err ->
@@ -2172,10 +2233,10 @@ class LocalHisabViewModel(
                     activeCallMemberName = item.memberName,
                     activeCallMemberPhone = item.rawPhone.ifBlank { "Free AI Voice Preview" },
                     activeCallDuesAmount = item.duesAmount,
-                    activeCallPhaseLabel = "${voiceOption.agentName} (Female AI) Preparing...",
+                    activeCallPhaseLabel = "${voiceOption.agentName} (${voiceOption.genderLabel}) Preparing...",
                     isGeneratingVoice = true,
                     isPlayingVoice = false,
-                    progressMessage = "${voiceOption.agentName} (Female) preparing voice for ${item.memberName}...",
+                    progressMessage = "${voiceOption.agentName} (${voiceOption.genderLabel}) preparing voice for ${item.memberName}...",
                     errorMessage = null
                 )
             }
@@ -2205,8 +2266,8 @@ class LocalHisabViewModel(
                         isGeneratingVoice = false,
                         isPlayingVoice = true,
                         activeCallScript = generated.script,
-                        activeCallPhaseLabel = "${voiceOption.agentName} (Female AI) Speaking...",
-                        progressMessage = "${voiceOption.agentName} (Female) speaking for ${item.memberName}..."
+                        activeCallPhaseLabel = "${voiceOption.agentName} (${voiceOption.genderLabel}) Speaking...",
+                        progressMessage = "${voiceOption.agentName} (${voiceOption.genderLabel}) speaking for ${item.memberName}..."
                     )
                 }
                 aiVoiceAssistant.playPcmAudio(generated.audioBytes, generated.mimeType)
@@ -2255,7 +2316,7 @@ class LocalHisabViewModel(
         aiCallCenterPrefs?.setLastRunMondayKey("")
         aiCallCenterPrefs?.setPendingAutoStartMondayKey("")
         refreshAiCallCenterQueue()
-        showMessage("Monday call queue reset")
+        showMessage("Call queue reset")
     }
 
     fun consumePendingDialIntent() {

@@ -7,6 +7,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -85,6 +87,7 @@ import com.example.R
 import com.example.ai.AiVoiceScope
 import com.example.ai.AiVoiceStatus
 import com.example.ai.FemaleAiVoiceOption
+import com.example.data.AiCallCenterPrefsStore
 import com.example.data.AppUpdateStatus
 import com.example.data.AppUpdateUiState
 import com.example.data.CloudSyncUiState
@@ -301,11 +304,14 @@ fun SettingsScreen(
                 SettingsListOptionRow(
                     icon = Icons.Outlined.PhoneInTalk,
                     title = "AI Call Center",
-                    subtitle = "Free Monday auto-call • Female voice",
+                    subtitle = "${aiCallCenterState.selectedVoice.agentName} (${aiCallCenterState.selectedVoice.genderLabel}) • ${AiCallCenterPrefsStore.formatEnabledDaysSummary(aiCallCenterState.enabledDays)}",
                     badgeText = if (aiCallCenterState.dueQueue.isNotEmpty()) {
                         "${aiCallCenterState.dueQueue.size} Due"
-                    } else if (aiCallCenterState.autoCallMondayEnabled) {
-                        "Monday"
+                    } else if (aiCallCenterState.autoCallMondayEnabled && aiCallCenterState.enabledDays.isNotEmpty()) {
+                        AiCallCenterPrefsStore.formatTimeSlot(
+                            aiCallCenterState.scheduledHour,
+                            aiCallCenterState.scheduledMinute
+                        )
                     } else {
                         "Paused"
                     },
@@ -592,6 +598,7 @@ fun SettingsScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VoiceSummaryReportPanel(
     members: List<Member>,
@@ -665,9 +672,10 @@ private fun VoiceSummaryReportPanel(
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(4.dp))
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             FemaleAiVoiceOption.entries.forEach { voice ->
                 val selected = aiVoiceState.selectedVoice == voice
@@ -686,7 +694,7 @@ private fun VoiceSummaryReportPanel(
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                         selectedLabelColor = MaterialTheme.colorScheme.primary
                     ),
-                    modifier = Modifier.testTag("ai_voice_option_${voice.voiceId.lowercase()}")
+                    modifier = Modifier.testTag("ai_voice_option_${voice.name.lowercase()}")
                 )
             }
         }
