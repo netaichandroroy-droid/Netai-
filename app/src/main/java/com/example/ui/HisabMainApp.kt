@@ -4,6 +4,7 @@ import android.accounts.AccountManager
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -58,11 +59,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,6 +86,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -285,9 +291,38 @@ fun HisabMainApp(
     var activeSuccessSeq by remember { mutableStateOf(0L) }
     val signedInCloudEmail = cloudSyncState.accountEmail.trim()
 
+    var driveConsentLauncherRef: androidx.activity.result.ActivityResultLauncher<Intent>? = null
     val executeDriveWithToken: (DrivePendingAction, String, String) -> Unit = { action, token, hintEmail ->
         val onUnauthorized: suspend () -> Unit = {
             GoogleDriveBackupClient.clearCachedToken(context, token)
+        }
+        val onRefreshTokenAfter401: suspend (String) -> DriveTokenResult = { targetEmail ->
+            val emailToUse = targetEmail.trim().ifBlank {
+                hintEmail.trim().ifBlank {
+                    driveState.connectedEmail.trim().ifBlank { signedInCloudEmail }
+                }
+            }
+            GoogleDriveBackupClient.acquireAccessTokenViaGoogleAuthUtil(context, emailToUse)
+        }
+        val onNeedsConsent: (Intent, String) -> Unit = { consentIntent, consentEmail ->
+            pendingDriveAction = action
+            pendingDriveEmail = consentEmail
+            val launcher = driveConsentLauncherRef
+            if (launcher != null) {
+                runCatching {
+                    launcher.launch(consentIntent)
+                }.onFailure {
+                    pendingDriveAction = null
+                    pendingDriveEmail = ""
+                    driveAuthBlockedEmail = consentEmail.ifBlank { signedInCloudEmail.ifBlank { "Google Account" } }
+                    showDriveBlockedDialog = true
+                }
+            } else {
+                pendingDriveAction = null
+                pendingDriveEmail = ""
+                driveAuthBlockedEmail = consentEmail.ifBlank { signedInCloudEmail.ifBlank { "Google Account" } }
+                showDriveBlockedDialog = true
+            }
         }
         when (action) {
             DrivePendingAction.CONNECT,
@@ -295,24 +330,34 @@ fun HisabMainApp(
             DrivePendingAction.SWITCH_ACCOUNT -> viewModel.completeDriveConnect(
                 accessToken = token,
                 hintEmail = hintEmail,
-                onUnauthorized = onUnauthorized
+                silent = (action == DrivePendingAction.AUTO_CONNECT_FROM_CLOUD),
+                autoRestoreIfLocalEmpty = true,
+                onUnauthorized = onUnauthorized,
+                onRefreshTokenAfter401 = onRefreshTokenAfter401,
+                onNeedsConsent = onNeedsConsent
             )
             DrivePendingAction.BACKUP_MANUAL -> viewModel.backupAllToGoogleDrive(
                 accessToken = token,
                 silent = false,
                 hintEmail = hintEmail,
-                onUnauthorized = onUnauthorized
+                onUnauthorized = onUnauthorized,
+                onRefreshTokenAfter401 = onRefreshTokenAfter401,
+                onNeedsConsent = onNeedsConsent
             )
             DrivePendingAction.BACKUP_SILENT -> viewModel.backupAllToGoogleDrive(
                 accessToken = token,
                 silent = true,
                 hintEmail = hintEmail,
-                onUnauthorized = onUnauthorized
+                onUnauthorized = onUnauthorized,
+                onRefreshTokenAfter401 = onRefreshTokenAfter401,
+                onNeedsConsent = null
             )
             DrivePendingAction.RESTORE -> viewModel.restoreAllFromGoogleDrive(
                 accessToken = token,
                 hintEmail = hintEmail,
-                onUnauthorized = onUnauthorized
+                onUnauthorized = onUnauthorized,
+                onRefreshTokenAfter401 = onRefreshTokenAfter401,
+                onNeedsConsent = onNeedsConsent
             )
         }
     }
@@ -328,9 +373,6 @@ fun HisabMainApp(
         val isInteractive = action != DrivePendingAction.BACKUP_SILENT &&
             action != DrivePendingAction.AUTO_CONNECT_FROM_CLOUD
         if (activityResult.resultCode != Activity.RESULT_OK) {
-            if (action == DrivePendingAction.AUTO_CONNECT_FROM_CLOUD && email.isNotBlank()) {
-                driveBackupStore.markAutoLinkSkipped(email)
-            }
             if (isInteractive) {
                 val blockedEmail = email.ifBlank { signedInCloudEmail.ifBlank { "Google Account" } }
                 driveAuthBlockedEmail = blockedEmail
@@ -342,9 +384,13 @@ fun HisabMainApp(
             when (val res = GoogleDriveBackupClient.acquireAccessTokenViaGoogleAuthUtil(context, email)) {
                 is DriveTokenResult.Success -> {
                     driveAuthBlockedEmail = null
+                    viewModel.markDriveNeedsReauth(false)
                     executeDriveWithToken(action, res.accessToken, res.accountEmail)
                 }
                 is DriveTokenResult.NeedsConsent -> {
+                    if (action == DrivePendingAction.BACKUP_SILENT) {
+                        viewModel.markDriveNeedsReauth(true)
+                    }
                     if (isInteractive) {
                         val blockedEmail = email.ifBlank { signedInCloudEmail.ifBlank { "Google Account" } }
                         driveAuthBlockedEmail = blockedEmail
@@ -364,6 +410,7 @@ fun HisabMainApp(
             }
         }
     }
+    driveConsentLauncherRef = driveConsentLauncher
 
     val accountPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -392,6 +439,7 @@ fun HisabMainApp(
         scope.launch {
             when (val res = GoogleDriveBackupClient.acquireAccessTokenViaGoogleAuthUtil(context, chosenEmail)) {
                 is DriveTokenResult.Success -> {
+                    viewModel.markDriveNeedsReauth(false)
                     executeDriveWithToken(action, res.accessToken, res.accountEmail)
                 }
                 is DriveTokenResult.NeedsConsent -> {
@@ -427,11 +475,12 @@ fun HisabMainApp(
                 when (val res = GoogleDriveBackupClient.acquireAccessTokenViaGoogleAuthUtil(context, targetEmail)) {
                     is DriveTokenResult.Success -> {
                         driveAuthBlockedEmail = null
+                        viewModel.markDriveNeedsReauth(false)
                         executeDriveWithToken(action, res.accessToken, res.accountEmail)
                     }
                     is DriveTokenResult.NeedsConsent -> {
-                        if (action == DrivePendingAction.AUTO_CONNECT_FROM_CLOUD) {
-                            driveBackupStore.markAutoLinkSkipped(targetEmail)
+                        if (action == DrivePendingAction.BACKUP_SILENT) {
+                            viewModel.markDriveNeedsReauth(true)
                         } else if (canLaunchUi) {
                             pendingDriveAction = action
                             pendingDriveEmail = res.accountEmail
@@ -447,9 +496,6 @@ fun HisabMainApp(
                         }
                     }
                     is DriveTokenResult.Failure -> {
-                        if (action == DrivePendingAction.AUTO_CONNECT_FROM_CLOUD) {
-                            driveBackupStore.markAutoLinkSkipped(targetEmail)
-                        }
                         if (canLaunchUi) {
                             val keepBoundEmail = action == DrivePendingAction.CONNECT && signedInCloudEmail.isNotBlank()
                             if (res.isNetworkError) {
@@ -511,6 +557,7 @@ fun HisabMainApp(
                 val accessToken = authResult.accessToken
                 if (!accessToken.isNullOrBlank()) {
                     driveAuthBlockedEmail = null
+                    viewModel.markDriveNeedsReauth(false)
                     executeDriveWithToken(action, accessToken, preferredEmail)
                     return@rememberLauncherForActivityResult
                 }
@@ -540,9 +587,6 @@ fun HisabMainApp(
                 "AuthorizationClient returned resultCode=${activityResult.resultCode} with null data"
             )
             if (activityResult.resultCode == Activity.RESULT_CANCELED) {
-                if (action == DrivePendingAction.AUTO_CONNECT_FROM_CLOUD && preferredEmail.isNotBlank()) {
-                    driveBackupStore.markAutoLinkSkipped(preferredEmail)
-                }
                 if (canLaunchUi) {
                     driveAuthBlockedEmail = preferredEmail.ifBlank { signedInCloudEmail.ifBlank { "Google Account" } }
                     showDriveBlockedDialog = true
@@ -560,11 +604,11 @@ fun HisabMainApp(
         val canLaunchUi = action != DrivePendingAction.BACKUP_SILENT &&
             action != DrivePendingAction.AUTO_CONNECT_FROM_CLOUD
         val forceAccountChooser = action == DrivePendingAction.SWITCH_ACCOUNT ||
-            (action == DrivePendingAction.CONNECT && signedInCloudEmail.isBlank())
+            (action == DrivePendingAction.CONNECT && signedInCloudEmail.isBlank() && driveState.connectedEmail.isBlank())
         val preferredEmail = when {
             forceAccountChooser -> ""
             action == DrivePendingAction.AUTO_CONNECT_FROM_CLOUD -> signedInCloudEmail
-            action == DrivePendingAction.CONNECT -> signedInCloudEmail
+            action == DrivePendingAction.CONNECT -> driveState.connectedEmail.trim().ifBlank { signedInCloudEmail }
             else -> driveState.connectedEmail.trim().ifBlank { signedInCloudEmail }
         }
 
@@ -596,14 +640,15 @@ fun HisabMainApp(
                                 pendingDriveEmail = ""
                                 launchNativeDriveFallback(action, preferredEmail)
                             }
-                        } else if (action == DrivePendingAction.AUTO_CONNECT_FROM_CLOUD && preferredEmail.isNotBlank()) {
-                            // Never force-show OAuth 403 block automatically after sign-in
-                            driveBackupStore.markAutoLinkSkipped(preferredEmail)
+                        } else if (preferredEmail.isNotBlank()) {
+                            // Silently attempt background OAuth token via GoogleAuthUtil
+                            launchNativeDriveFallback(action, preferredEmail)
                         }
                     } else {
                         val token = result.accessToken
                         if (!token.isNullOrBlank()) {
                             driveAuthBlockedEmail = null
+                            viewModel.markDriveNeedsReauth(false)
                             executeDriveWithToken(action, token, preferredEmail)
                         } else if (canLaunchUi || preferredEmail.isNotBlank()) {
                             launchNativeDriveFallback(action, preferredEmail)
@@ -822,6 +867,42 @@ fun HisabMainApp(
         }
     }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val latestDriveState by rememberUpdatedState(driveState)
+    val latestSignedInCloudEmail by rememberUpdatedState(signedInCloudEmail)
+    val latestRequestDriveAuthAndRun by rememberUpdatedState(requestDriveAuthAndRun)
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    viewModel.refreshSharedData()
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    val state = latestDriveState
+                    if (state.isConnected && state.autoBackupEnabled && viewModel.hasPendingDriveBackup()) {
+                        if (state.safDocumentUri.isNotBlank()) {
+                            viewModel.backupAllToSafUri(
+                                context = context,
+                                uriString = state.safDocumentUri,
+                                silent = true,
+                                emailHint = latestSignedInCloudEmail
+                            )
+                        }
+                        if (state.oauthConnected) {
+                            latestRequestDriveAuthAndRun(DrivePendingAction.BACKUP_SILENT)
+                        }
+                    }
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     LaunchedEffect(
         driveState.isConnected,
         driveState.oauthConnected,
@@ -833,8 +914,38 @@ fun HisabMainApp(
         if (driveState.oauthConnected && restoredEmail.isNotBlank()) {
             if (!primedDriveEmail.equals(restoredEmail, ignoreCase = true)) {
                 primedDriveEmail = restoredEmail
-                withContext(Dispatchers.IO) {
+                val primeRes = withContext(Dispatchers.IO) {
                     GoogleDriveBackupClient.acquireAccessTokenViaGoogleAuthUtil(context, restoredEmail)
+                }
+                when (primeRes) {
+                    is DriveTokenResult.Success -> {
+                        viewModel.markDriveNeedsReauth(false)
+                        if (viewModel.isLocalDataEmpty()) {
+                            viewModel.restoreFromDriveIfLocalEmpty(
+                                accessToken = primeRes.accessToken,
+                                hintEmail = primeRes.accountEmail,
+                                onUnauthorized = {
+                                    GoogleDriveBackupClient.clearCachedToken(context, primeRes.accessToken)
+                                },
+                                onRefreshTokenAfter401 = { targetEmail ->
+                                    GoogleDriveBackupClient.acquireAccessTokenViaGoogleAuthUtil(
+                                        context,
+                                        targetEmail.ifBlank { restoredEmail }
+                                    )
+                                }
+                            )
+                        } else if (driveState.autoBackupEnabled && viewModel.hasPendingDriveBackup()) {
+                            executeDriveWithToken(
+                                DrivePendingAction.BACKUP_SILENT,
+                                primeRes.accessToken,
+                                primeRes.accountEmail
+                            )
+                        }
+                    }
+                    is DriveTokenResult.NeedsConsent -> {
+                        viewModel.markDriveNeedsReauth(true)
+                    }
+                    is DriveTokenResult.Failure -> Unit
                 }
             }
             if (signedInCloudEmail.isNotBlank()) {
@@ -860,7 +971,7 @@ fun HisabMainApp(
 
     LaunchedEffect(autoBackupRevision) {
         if (autoBackupRevision > 0 && driveState.isConnected && driveState.autoBackupEnabled) {
-            delay(1200)
+            delay(450)
             if (driveState.safDocumentUri.isNotBlank()) {
                 viewModel.backupAllToSafUri(
                     context = context,
@@ -1159,6 +1270,10 @@ fun HisabMainApp(
                                             DrivePendingAction.CONNECT
                                         }
                                     )
+                                },
+                                onRefreshGoogleDriveAccess = {
+                                    driveBackupStore.clearAutoLinkSkipped()
+                                    requestDriveAuthAndRun(DrivePendingAction.CONNECT)
                                 },
                                 onLinkGoogleDriveFile = {
                                     driveSafCreateLauncher.launch(GoogleDriveBackupClient.BACKUP_FILE_NAME)

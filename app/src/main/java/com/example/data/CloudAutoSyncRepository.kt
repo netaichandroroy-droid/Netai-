@@ -325,6 +325,7 @@ class CloudAutoSyncRepository(
         }
         val cloudTxIds = cloudTxSnap.documents.mapTo(HashSet()) { it.id }
         cloudTxIds.forEach { knownDocIds.add("$COL_TRANSACTIONS/$it") }
+        syncPrefs.addConfirmedServerIds(uid, COL_TRANSACTIONS, cloudTxIds)
         localTxStore.loadAll().forEach { tx ->
             val docId = sanitizeId(tx.id)
             if (overwriteExisting || !cloudTxIds.contains(docId) || pendingTxUpserts.contains(docId)) {
@@ -342,6 +343,7 @@ class CloudAutoSyncRepository(
         }
         val cloudMemberIds = cloudMemberSnap.documents.mapTo(HashSet()) { it.id }
         cloudMemberIds.forEach { knownDocIds.add("$COL_MEMBERS/$it") }
+        syncPrefs.addConfirmedServerIds(uid, COL_MEMBERS, cloudMemberIds)
         localMembers@ run {
             memberStore.loadAll().forEach { member ->
                 val docId = sanitizeId(member.id)
@@ -361,6 +363,7 @@ class CloudAutoSyncRepository(
         }
         val cloudTakaIds = cloudTakaSnap.documents.mapTo(HashSet()) { it.id }
         cloudTakaIds.forEach { knownDocIds.add("$COL_TAKA_JOMA/$it") }
+        syncPrefs.addConfirmedServerIds(uid, COL_TAKA_JOMA, cloudTakaIds)
         takaJomaStore.loadAll().forEach { entry ->
             val docId = sanitizeId(entry.id)
             if (overwriteExisting || !cloudTakaIds.contains(docId) || pendingTakaUpserts.contains(docId)) {
@@ -378,6 +381,7 @@ class CloudAutoSyncRepository(
         }
         val cloudSalesIds = cloudSalesSnap.documents.mapTo(HashSet()) { it.id }
         cloudSalesIds.forEach { knownDocIds.add("$COL_MONTHLY_SALES/$it") }
+        syncPrefs.addConfirmedServerIds(uid, COL_MONTHLY_SALES, cloudSalesIds)
         monthlySalesStore.loadAll().forEach { record ->
             val docId = sanitizeId(record.id)
             if (overwriteExisting || !cloudSalesIds.contains(docId) || pendingSalesUpserts.contains(docId)) {
@@ -427,31 +431,36 @@ class CloudAutoSyncRepository(
                 if (snapshot.metadata.isFromCache && snapshot.isEmpty && !syncPrefs.isSeededForUid(uid)) {
                     return@collect
                 }
+                val isFromCache = snapshot.metadata.isFromCache
                 val pendingDeletes = syncPrefs.getPendingDeletes(COL_TRANSACTIONS)
                 val pendingUpserts = syncPrefs.getPendingUpserts(COL_TRANSACTIONS)
+                val confirmedIds = syncPrefs.getConfirmedServerIds(uid, COL_TRANSACTIONS)
+                val remoteIds = LinkedHashSet<String>(snapshot.documents.size)
                 val remote = snapshot.documents.mapNotNull { doc ->
                     knownDocIds.add("$COL_TRANSACTIONS/${doc.id}")
+                    remoteIds.add(doc.id)
                     if (doc.id in pendingDeletes) null else doc.toHisabTransactionOrNull()
                 }
+                val newlyQueuedIds = LinkedHashSet<String>()
                 synchronized(localWriteLock) {
-                    val merged = if (pendingUpserts.isEmpty()) {
-                        remote
-                    } else {
-                        val byId = remote.associateByTo(LinkedHashMap()) { sanitizeId(it.id) }
-                        localTxStore.loadAll().forEach { localTx ->
-                            val key = sanitizeId(localTx.id)
-                            if (key in pendingUpserts && key !in pendingDeletes) {
-                                byId[key] = localTx
-                            }
-                        }
-                        byId.values.toList()
-                    }.sortedWith(
+                    val merged = mergeRemoteAndLocal(
+                        remote = remote,
+                        local = localTxStore.loadAll(),
+                        idSelector = { sanitizeId(it.id) },
+                        pendingUpserts = pendingUpserts,
+                        pendingDeletes = pendingDeletes,
+                        confirmedServerIds = confirmedIds,
+                        isFromCache = isFromCache,
+                        onDiscoveredUnsyncedLocalId = { newlyQueuedIds.add(it) }
+                    ).sortedWith(
                         compareByDescending<HisabTransaction> { it.date }
                             .thenByDescending { it.createdAt?.seconds ?: 0L }
                     )
                     localTxStore.saveAll(merged)
                 }
-                if (!snapshot.metadata.isFromCache) {
+                newlyQueuedIds.forEach { syncPrefs.markPendingUpsert(COL_TRANSACTIONS, it) }
+                if (!isFromCache) {
+                    syncPrefs.replaceConfirmedServerIds(uid, COL_TRANSACTIONS, remoteIds)
                     triggerPendingFlushIfNeeded(uid)
                 }
                 markSyncedNow()
@@ -470,30 +479,35 @@ class CloudAutoSyncRepository(
                 if (snapshot.metadata.isFromCache && snapshot.isEmpty && !syncPrefs.isSeededForUid(uid)) {
                     return@collect
                 }
+                val isFromCache = snapshot.metadata.isFromCache
                 val pendingDeletes = syncPrefs.getPendingDeletes(COL_MEMBERS)
                 val pendingUpserts = syncPrefs.getPendingUpserts(COL_MEMBERS)
+                val confirmedIds = syncPrefs.getConfirmedServerIds(uid, COL_MEMBERS)
+                val remoteIds = LinkedHashSet<String>(snapshot.documents.size)
+                val newlyQueuedIds = LinkedHashSet<String>()
                 synchronized(localWriteLock) {
                     val existingLocal = memberStore.loadAll()
                     val existingPhotos = existingLocal.associate { it.id to it.profilePhotoPath }
                     val remote = snapshot.documents.mapNotNull { doc ->
                         knownDocIds.add("$COL_MEMBERS/${doc.id}")
+                        remoteIds.add(doc.id)
                         if (doc.id in pendingDeletes) null else doc.toMemberOrNull(existingPhotos[doc.id].orEmpty())
                     }
-                    val merged = if (pendingUpserts.isEmpty()) {
-                        remote
-                    } else {
-                        val byId = remote.associateByTo(LinkedHashMap()) { sanitizeId(it.id) }
-                        existingLocal.forEach { localMember ->
-                            val key = sanitizeId(localMember.id)
-                            if (key in pendingUpserts && key !in pendingDeletes) {
-                                byId[key] = localMember
-                            }
-                        }
-                        byId.values.toList()
-                    }.sortedBy { it.createdAtMs }
+                    val merged = mergeRemoteAndLocal(
+                        remote = remote,
+                        local = existingLocal,
+                        idSelector = { sanitizeId(it.id) },
+                        pendingUpserts = pendingUpserts,
+                        pendingDeletes = pendingDeletes,
+                        confirmedServerIds = confirmedIds,
+                        isFromCache = isFromCache,
+                        onDiscoveredUnsyncedLocalId = { newlyQueuedIds.add(it) }
+                    ).sortedBy { it.createdAtMs }
                     memberStore.saveAll(merged)
                 }
-                if (!snapshot.metadata.isFromCache) {
+                newlyQueuedIds.forEach { syncPrefs.markPendingUpsert(COL_MEMBERS, it) }
+                if (!isFromCache) {
+                    syncPrefs.replaceConfirmedServerIds(uid, COL_MEMBERS, remoteIds)
                     triggerPendingFlushIfNeeded(uid)
                 }
                 markSyncedNow()
@@ -512,30 +526,35 @@ class CloudAutoSyncRepository(
                 if (snapshot.metadata.isFromCache && snapshot.isEmpty && !syncPrefs.isSeededForUid(uid)) {
                     return@collect
                 }
+                val isFromCache = snapshot.metadata.isFromCache
                 val pendingDeletes = syncPrefs.getPendingDeletes(COL_TAKA_JOMA)
                 val pendingUpserts = syncPrefs.getPendingUpserts(COL_TAKA_JOMA)
+                val confirmedIds = syncPrefs.getConfirmedServerIds(uid, COL_TAKA_JOMA)
+                val remoteIds = LinkedHashSet<String>(snapshot.documents.size)
+                val newlyQueuedIds = LinkedHashSet<String>()
                 synchronized(localWriteLock) {
                     val existingLocal = takaJomaStore.loadAll()
                     val existingPhotos = existingLocal.associate { it.id to it.photoPath }
                     val remote = snapshot.documents.mapNotNull { doc ->
                         knownDocIds.add("$COL_TAKA_JOMA/${doc.id}")
+                        remoteIds.add(doc.id)
                         if (doc.id in pendingDeletes) null else doc.toMemberTakaJomaOrNull(existingPhotos[doc.id].orEmpty())
                     }
-                    val merged = if (pendingUpserts.isEmpty()) {
-                        remote
-                    } else {
-                        val byId = remote.associateByTo(LinkedHashMap()) { sanitizeId(it.id) }
-                        existingLocal.forEach { localEntry ->
-                            val key = sanitizeId(localEntry.id)
-                            if (key in pendingUpserts && key !in pendingDeletes) {
-                                byId[key] = localEntry
-                            }
-                        }
-                        byId.values.toList()
-                    }.sortedByDescending { it.createdAtMs }
+                    val merged = mergeRemoteAndLocal(
+                        remote = remote,
+                        local = existingLocal,
+                        idSelector = { sanitizeId(it.id) },
+                        pendingUpserts = pendingUpserts,
+                        pendingDeletes = pendingDeletes,
+                        confirmedServerIds = confirmedIds,
+                        isFromCache = isFromCache,
+                        onDiscoveredUnsyncedLocalId = { newlyQueuedIds.add(it) }
+                    ).sortedByDescending { it.createdAtMs }
                     takaJomaStore.saveAll(merged)
                 }
-                if (!snapshot.metadata.isFromCache) {
+                newlyQueuedIds.forEach { syncPrefs.markPendingUpsert(COL_TAKA_JOMA, it) }
+                if (!isFromCache) {
+                    syncPrefs.replaceConfirmedServerIds(uid, COL_TAKA_JOMA, remoteIds)
                     triggerPendingFlushIfNeeded(uid)
                 }
                 markSyncedNow()
@@ -554,29 +573,34 @@ class CloudAutoSyncRepository(
                 if (snapshot.metadata.isFromCache && snapshot.isEmpty && !syncPrefs.isSeededForUid(uid)) {
                     return@collect
                 }
+                val isFromCache = snapshot.metadata.isFromCache
                 val pendingDeletes = syncPrefs.getPendingDeletes(COL_MONTHLY_SALES)
                 val pendingUpserts = syncPrefs.getPendingUpserts(COL_MONTHLY_SALES)
+                val confirmedIds = syncPrefs.getConfirmedServerIds(uid, COL_MONTHLY_SALES)
+                val remoteIds = LinkedHashSet<String>(snapshot.documents.size)
+                val newlyQueuedIds = LinkedHashSet<String>()
                 synchronized(localWriteLock) {
                     val existingLocal = monthlySalesStore.loadAll()
                     val remote = snapshot.documents.mapNotNull { doc ->
                         knownDocIds.add("$COL_MONTHLY_SALES/${doc.id}")
+                        remoteIds.add(doc.id)
                         if (doc.id in pendingDeletes) null else doc.toMonthlySalesOrNull()
                     }
-                    val merged = if (pendingUpserts.isEmpty()) {
-                        remote
-                    } else {
-                        val byId = remote.associateByTo(LinkedHashMap()) { sanitizeId(it.id) }
-                        existingLocal.forEach { localRecord ->
-                            val key = sanitizeId(localRecord.id)
-                            if (key in pendingUpserts && key !in pendingDeletes) {
-                                byId[key] = localRecord
-                            }
-                        }
-                        byId.values.toList()
-                    }.sortedByDescending { it.createdAtMs }
+                    val merged = mergeRemoteAndLocal(
+                        remote = remote,
+                        local = existingLocal,
+                        idSelector = { sanitizeId(it.id) },
+                        pendingUpserts = pendingUpserts,
+                        pendingDeletes = pendingDeletes,
+                        confirmedServerIds = confirmedIds,
+                        isFromCache = isFromCache,
+                        onDiscoveredUnsyncedLocalId = { newlyQueuedIds.add(it) }
+                    ).sortedByDescending { it.createdAtMs }
                     monthlySalesStore.saveAll(merged)
                 }
-                if (!snapshot.metadata.isFromCache) {
+                newlyQueuedIds.forEach { syncPrefs.markPendingUpsert(COL_MONTHLY_SALES, it) }
+                if (!isFromCache) {
+                    syncPrefs.replaceConfirmedServerIds(uid, COL_MONTHLY_SALES, remoteIds)
                     triggerPendingFlushIfNeeded(uid)
                 }
                 markSyncedNow()
@@ -980,6 +1004,7 @@ class CloudAutoSyncRepository(
                 docRef.set(createData).awaitGmsTask()
             }
             knownDocIds.add(key)
+            syncPrefs.addConfirmedServerIds(uid, collectionName, listOf(docId))
             syncPrefs.clearPendingUpsert(collectionName, docId)
             markSyncedNow()
             Result.success(Unit)
@@ -1007,6 +1032,7 @@ class CloudAutoSyncRepository(
             docPath = docRef.path
             docRef.delete().awaitGmsTask()
             knownDocIds.remove("$collectionName/$docId")
+            syncPrefs.removeConfirmedServerId(uid, collectionName, docId)
             syncPrefs.clearPendingDelete(collectionName, docId)
             markSyncedNow()
             Result.success(Unit)
@@ -1177,6 +1203,40 @@ class CloudAutoSyncRepository(
         fun sanitizeId(rawId: String): String {
             val cleaned = rawId.trim().replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(128)
             return cleaned.ifBlank { UUID.randomUUID().toString() }
+        }
+
+        internal fun <T> mergeRemoteAndLocal(
+            remote: List<T>,
+            local: List<T>,
+            idSelector: (T) -> String,
+            pendingUpserts: Set<String>,
+            pendingDeletes: Set<String>,
+            confirmedServerIds: Set<String>,
+            isFromCache: Boolean,
+            onDiscoveredUnsyncedLocalId: (String) -> Unit = {}
+        ): List<T> {
+            val byId = LinkedHashMap<String, T>(remote.size + local.size)
+            remote.forEach { item ->
+                val key = idSelector(item)
+                if (key !in pendingDeletes) {
+                    byId[key] = item
+                }
+            }
+            local.forEach { localItem ->
+                val key = idSelector(localItem)
+                if (key in pendingDeletes) return@forEach
+                when {
+                    key in pendingUpserts -> {
+                        byId[key] = localItem
+                    }
+                    key !in byId && (isFromCache || key !in confirmedServerIds) -> {
+                        // Preserve any local-only Admin/Member entry not yet present on the server
+                        byId[key] = localItem
+                        onDiscoveredUnsyncedLocalId(key)
+                    }
+                }
+            }
+            return byId.values.toList()
         }
     }
 }

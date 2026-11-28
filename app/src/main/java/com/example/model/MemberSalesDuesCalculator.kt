@@ -32,9 +32,22 @@ data class DepositsSalesNetSummary(
     val totalDeposits: Double = 0.0,
     val pendingDeposits: Double = 0.0,
     val totalSales: Double = 0.0,
+    val totalDues: Double = 0.0,
     val netBalance: Double = 0.0,
     val approvedDepositCount: Int = 0,
     val salesRecordCount: Int = 0
+)
+
+data class DayWiseDepositSummary(
+    val date: String,
+    val approvedAmount: Double,
+    val pendingAmount: Double,
+    val totalAmount: Double,
+    val approvedCount: Int,
+    val pendingCount: Int,
+    val entryCount: Int,
+    val memberCount: Int,
+    val entries: List<MemberTakaJoma>
 )
 
 object MemberSalesDuesCalculator {
@@ -253,13 +266,48 @@ object MemberSalesDuesCalculator {
         val pendingDeposits = pendingEntries.sumOf { it.amount.coerceAtLeast(0.0) }
         val totalSales = monthlySales.sumOf { it.tpPlusVat.coerceAtLeast(0.0) } +
             members.sumOf { it.salesAmount.coerceAtLeast(0.0) }
+        val totalDues = buildAllMemberSummaries(members, monthlySales, submissions).sumOf { it.dues }
         return DepositsSalesNetSummary(
             totalDeposits = totalDeposits,
             pendingDeposits = pendingDeposits,
             totalSales = totalSales,
+            totalDues = totalDues,
             netBalance = totalDeposits - totalSales,
             approvedDepositCount = approvedEntries.size,
             salesRecordCount = monthlySales.size
         )
+    }
+
+    fun buildDayWiseDepositSummaries(
+        submissions: List<MemberTakaJoma>
+    ): List<DayWiseDepositSummary> {
+        return submissions
+            .filter { it.resolvedStatus != TakaJomaStatus.REJECTED }
+            .groupBy { it.date.trim().ifBlank { "Unknown" } }
+            .entries
+            .sortedByDescending { it.key }
+            .map { (date, entries) ->
+                val approvedEntries = entries.filter { it.resolvedStatus == TakaJomaStatus.APPROVED }
+                val pendingEntries = entries.filter { it.resolvedStatus == TakaJomaStatus.PENDING }
+                val approvedAmount = approvedEntries.sumOf { it.amount.coerceAtLeast(0.0) }
+                val pendingAmount = pendingEntries.sumOf { it.amount.coerceAtLeast(0.0) }
+                val memberKeys = entries.mapNotNull { entry ->
+                    entry.memberId.ifBlank { entry.code.ifBlank { entry.name } }
+                        .trim()
+                        .lowercase()
+                        .takeIf { it.isNotEmpty() }
+                }.distinct()
+                DayWiseDepositSummary(
+                    date = date,
+                    approvedAmount = approvedAmount,
+                    pendingAmount = pendingAmount,
+                    totalAmount = approvedAmount + pendingAmount,
+                    approvedCount = approvedEntries.size,
+                    pendingCount = pendingEntries.size,
+                    entryCount = entries.size,
+                    memberCount = memberKeys.size.coerceAtLeast(1),
+                    entries = entries
+                )
+            }
     }
 }

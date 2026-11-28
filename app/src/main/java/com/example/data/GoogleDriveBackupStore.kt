@@ -12,7 +12,9 @@ data class GoogleDriveBackupStatus(
     val autoBackupEnabled: Boolean = true,
     val oauthConnected: Boolean = false,
     val safDocumentUri: String = "",
-    val safDisplayName: String = ""
+    val safDisplayName: String = "",
+    val backupPending: Boolean = false,
+    val lastBackedUpSignature: String = ""
 )
 
 class GoogleDriveBackupStore(context: Context) {
@@ -41,7 +43,9 @@ class GoogleDriveBackupStore(context: Context) {
             autoBackupEnabled = prefs.getBoolean(KEY_AUTO_BACKUP, true),
             oauthConnected = oauthConnected,
             safDocumentUri = safUri,
-            safDisplayName = safName
+            safDisplayName = safName,
+            backupPending = prefs.getBoolean(KEY_BACKUP_PENDING, false),
+            lastBackedUpSignature = prefs.getString(KEY_LAST_BACKED_UP_SIGNATURE, "")?.trim().orEmpty()
         )
     }
 
@@ -60,7 +64,9 @@ class GoogleDriveBackupStore(context: Context) {
         fileId: String,
         timestampMs: Long,
         summary: String,
-        email: String = ""
+        email: String = "",
+        backedUpSignature: String = "",
+        clearPending: Boolean = true
     ) {
         prefs.edit(commit = true) {
             putBoolean(KEY_CONNECTED, true)
@@ -72,8 +78,18 @@ class GoogleDriveBackupStore(context: Context) {
             if (fileId.isNotBlank()) {
                 putString(KEY_FILE_ID, fileId.trim())
             }
-            putLong(KEY_LAST_BACKUP_MS, timestampMs)
-            putString(KEY_LAST_SUMMARY, summary.trim())
+            if (timestampMs > 0L) {
+                putLong(KEY_LAST_BACKUP_MS, timestampMs)
+            }
+            if (summary.isNotBlank()) {
+                putString(KEY_LAST_SUMMARY, summary.trim())
+            }
+            if (clearPending) {
+                putBoolean(KEY_BACKUP_PENDING, false)
+            }
+            if (backedUpSignature.isNotBlank()) {
+                putString(KEY_LAST_BACKED_UP_SIGNATURE, backedUpSignature.trim())
+            }
         }
     }
 
@@ -100,7 +116,9 @@ class GoogleDriveBackupStore(context: Context) {
         displayName: String,
         timestampMs: Long,
         summary: String,
-        email: String = ""
+        email: String = "",
+        backedUpSignature: String = "",
+        clearPending: Boolean = true
     ) {
         val cleanUri = uriString.trim()
         if (cleanUri.isEmpty()) return
@@ -114,8 +132,18 @@ class GoogleDriveBackupStore(context: Context) {
             if (email.isNotBlank() && prefs.getString(KEY_EMAIL, "").isNullOrBlank()) {
                 putString(KEY_EMAIL, email.trim())
             }
-            putLong(KEY_LAST_BACKUP_MS, timestampMs)
-            putString(KEY_LAST_SUMMARY, summary.trim())
+            if (timestampMs > 0L) {
+                putLong(KEY_LAST_BACKUP_MS, timestampMs)
+            }
+            if (summary.isNotBlank()) {
+                putString(KEY_LAST_SUMMARY, summary.trim())
+            }
+            if (clearPending) {
+                putBoolean(KEY_BACKUP_PENDING, false)
+            }
+            if (backedUpSignature.isNotBlank()) {
+                putString(KEY_LAST_BACKED_UP_SIGNATURE, backedUpSignature.trim())
+            }
         }
     }
 
@@ -131,6 +159,35 @@ class GoogleDriveBackupStore(context: Context) {
     fun setAutoBackupEnabled(enabled: Boolean) {
         prefs.edit(commit = true) {
             putBoolean(KEY_AUTO_BACKUP, enabled)
+        }
+    }
+
+    fun markBackupPending() {
+        prefs.edit(commit = true) {
+            putBoolean(KEY_BACKUP_PENDING, true)
+        }
+    }
+
+    fun isBackupPending(): Boolean {
+        return prefs.getBoolean(KEY_BACKUP_PENDING, false)
+    }
+
+    fun clearBackupPending(signature: String = "") {
+        prefs.edit(commit = true) {
+            putBoolean(KEY_BACKUP_PENDING, false)
+            if (signature.isNotBlank()) {
+                putString(KEY_LAST_BACKED_UP_SIGNATURE, signature.trim())
+            }
+        }
+    }
+
+    fun getLastBackedUpSignature(): String {
+        return prefs.getString(KEY_LAST_BACKED_UP_SIGNATURE, "")?.trim().orEmpty()
+    }
+
+    fun setLastBackedUpSignature(signature: String) {
+        prefs.edit(commit = true) {
+            putString(KEY_LAST_BACKED_UP_SIGNATURE, signature.trim())
         }
     }
 
@@ -165,6 +222,8 @@ class GoogleDriveBackupStore(context: Context) {
             remove(KEY_SAF_NAME)
             remove(KEY_LAST_BACKUP_MS)
             remove(KEY_LAST_SUMMARY)
+            remove(KEY_BACKUP_PENDING)
+            remove(KEY_LAST_BACKED_UP_SIGNATURE)
         }
     }
 
@@ -199,6 +258,8 @@ class GoogleDriveBackupStore(context: Context) {
                 remove(KEY_FILE_ID)
                 remove(KEY_LAST_BACKUP_MS)
                 remove(KEY_LAST_SUMMARY)
+                remove(KEY_BACKUP_PENDING)
+                remove(KEY_LAST_BACKED_UP_SIGNATURE)
             }
             return
         }
@@ -242,5 +303,7 @@ class GoogleDriveBackupStore(context: Context) {
         private const val KEY_LAST_SUMMARY = "drive_last_summary"
         private const val KEY_AUTO_BACKUP = "drive_auto_backup_enabled"
         private const val KEY_AUTO_LINK_SKIPPED_EMAIL = "drive_auto_link_skipped_email"
+        private const val KEY_BACKUP_PENDING = "drive_backup_pending"
+        private const val KEY_LAST_BACKED_UP_SIGNATURE = "drive_last_backed_up_signature"
     }
 }

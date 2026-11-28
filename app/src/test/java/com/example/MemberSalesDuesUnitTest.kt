@@ -513,6 +513,7 @@ class MemberSalesDuesUnitTest {
         assertEquals(20000.0, positiveSummary.totalDeposits, 0.001)
         assertEquals(4000.0, positiveSummary.pendingDeposits, 0.001)
         assertEquals(17500.0, positiveSummary.totalSales, 0.001)
+        assertEquals(500.0, positiveSummary.totalDues, 0.001)
         assertEquals(2500.0, positiveSummary.netBalance, 0.001)
         assertEquals(2, positiveSummary.approvedDepositCount)
         assertEquals(2, positiveSummary.salesRecordCount)
@@ -525,6 +526,65 @@ class MemberSalesDuesUnitTest {
         )
         assertEquals(8000.0, negativeSummary.totalDeposits, 0.001)
         assertEquals(17500.0, negativeSummary.totalSales, 0.001)
+        assertEquals(12500.0, negativeSummary.totalDues, 0.001)
         assertEquals(-9500.0, negativeSummary.netBalance, 0.001)
+    }
+
+    @Test
+    fun buildDayWiseDepositSummaries_groupsByDateDescendingAndExcludesRejected() {
+        val submissions = listOf(
+            MemberTakaJoma(
+                id = "a1",
+                memberId = "m1",
+                name = "Karim",
+                code = "K-01",
+                depot = "Rangpur",
+                amount = 5000.0,
+                date = "2026-11-21",
+                approvalStatus = TakaJomaStatus.APPROVED.wireValue
+            ),
+            MemberTakaJoma(
+                id = "a2",
+                memberId = "m1",
+                name = "Karim",
+                code = "K-01",
+                depot = "Rangpur",
+                amount = 3000.0,
+                date = "2026-11-28",
+                approvalStatus = TakaJomaStatus.APPROVED.wireValue
+            ),
+            MemberTakaJoma(
+                id = "a3",
+                memberId = "m2",
+                name = "Rahim",
+                code = "R-02",
+                depot = "Rangpur",
+                amount = 2000.0,
+                date = "2026-11-28",
+                approvalStatus = TakaJomaStatus.PENDING.wireValue
+            ),
+            MemberTakaJoma(
+                id = "a4",
+                memberId = "m2",
+                name = "Rahim",
+                code = "R-02",
+                depot = "Rangpur",
+                amount = 1500.0,
+                date = "2026-11-28",
+                approvalStatus = TakaJomaStatus.REJECTED.wireValue
+            )
+        )
+
+        val dayWise = MemberSalesDuesCalculator.buildDayWiseDepositSummaries(submissions)
+        assertEquals(2, dayWise.size)
+        assertEquals("2026-11-28", dayWise[0].date)
+        assertEquals(3000.0, dayWise[0].approvedAmount, 0.001)
+        assertEquals(2000.0, dayWise[0].pendingAmount, 0.001)
+        assertEquals(2, dayWise[0].entryCount)
+        assertEquals(2, dayWise[0].memberCount)
+
+        assertEquals("2026-11-21", dayWise[1].date)
+        assertEquals(5000.0, dayWise[1].approvedAmount, 0.001)
+        assertEquals(0.0, dayWise[1].pendingAmount, 0.001)
     }
 }

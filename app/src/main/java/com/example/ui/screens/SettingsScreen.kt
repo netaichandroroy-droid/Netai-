@@ -160,6 +160,7 @@ fun SettingsScreen(
     onCloudSignIn: () -> Unit = {},
     onSwitchCloudAccount: () -> Unit = onCloudSignOut,
     onConnectGoogleDrive: () -> Unit = {},
+    onRefreshGoogleDriveAccess: () -> Unit = onConnectGoogleDrive,
     onLinkGoogleDriveFile: () -> Unit = {},
     onRestoreFromDriveFile: () -> Unit = {},
     onShowDriveAccessHelp: () -> Unit = {},
@@ -401,17 +402,30 @@ fun SettingsScreen(
                 SettingsListOptionRow(
                     icon = Icons.Outlined.CloudDone,
                     title = "Google Drive Backup & Sync",
-                    subtitle = driveState.connectedEmail.takeIf { it.isNotBlank() }
-                        ?: driveState.safDisplayName.takeIf { it.isNotBlank() },
-                    badgeText = if (driveState.isSyncing) {
-                        "Syncing"
-                    } else if (driveState.isConnected) {
-                        "Connected"
-                    } else {
-                        "Setup"
+                    subtitle = when {
+                        driveState.isConnected && driveState.needsReauth ->
+                            "${driveState.connectedEmail.ifBlank { driveState.safDisplayName.ifBlank { "Google Drive" } }} • Tap to refresh access"
+                        driveState.connectedEmail.isNotBlank() -> driveState.connectedEmail
+                        driveState.safDisplayName.isNotBlank() -> driveState.safDisplayName
+                        else -> null
                     },
-                    badgeBg = if (driveState.isConnected) onBg else MaterialTheme.colorScheme.surfaceVariant,
-                    badgeFg = if (driveState.isConnected) onFg else MaterialTheme.colorScheme.onSurfaceVariant,
+                    badgeText = when {
+                        driveState.isSyncing -> "Syncing"
+                        driveState.isConnected && driveState.needsReauth -> "Refresh"
+                        driveState.isConnected && driveState.autoBackupEnabled -> "Auto ON"
+                        driveState.isConnected -> "Connected"
+                        else -> "Setup"
+                    },
+                    badgeBg = when {
+                        driveState.isConnected && driveState.needsReauth -> NagadSurface
+                        driveState.isConnected -> onBg
+                        else -> MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    badgeFg = when {
+                        driveState.isConnected && driveState.needsReauth -> NagadAccent
+                        driveState.isConnected -> onFg
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     iconBg = if (driveState.isConnected) onBg else MaterialTheme.colorScheme.primaryContainer,
                     iconTint = if (driveState.isConnected) onFg else MaterialTheme.colorScheme.primary,
                     iconGlowColor = if (driveState.isConnected) NeonEmerald else NeonCyan,
@@ -531,6 +545,7 @@ fun SettingsScreen(
                             driveState = driveState,
                             driveAuthBlockedEmail = driveAuthBlockedEmail,
                             onConnectGoogleDrive = onConnectGoogleDrive,
+                            onRefreshGoogleDriveAccess = onRefreshGoogleDriveAccess,
                             onLinkGoogleDriveFile = onLinkGoogleDriveFile,
                             onRestoreFromDriveFile = onRestoreFromDriveFile,
                             onShowDriveAccessHelp = onShowDriveAccessHelp,
@@ -936,6 +951,7 @@ private fun GoogleDriveBackupPanel(
     driveState: DriveUiState,
     driveAuthBlockedEmail: String?,
     onConnectGoogleDrive: () -> Unit,
+    onRefreshGoogleDriveAccess: () -> Unit,
     onLinkGoogleDriveFile: () -> Unit,
     onRestoreFromDriveFile: () -> Unit,
     onShowDriveAccessHelp: () -> Unit,
@@ -1037,6 +1053,71 @@ private fun GoogleDriveBackupPanel(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    Text(
+                        text = if (driveState.autoBackupEnabled) {
+                            "Permanent Auto-Backup: ON"
+                        } else {
+                            "Permanent Auto-Backup: Paused"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (driveState.autoBackupEnabled) onFg else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (driveState.needsReauth) {
+                Spacer(modifier = Modifier.height(8.dp))
+                GlossyInnerMetricTile(
+                    accentColor = NagadAccent,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("drive_needs_reauth_card")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = if (driveState.oauthConnected) {
+                                "Google Drive permission refresh needed"
+                            } else {
+                                "Drive file write access needs refresh"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = NagadAccent
+                        )
+                        Text(
+                            text = if (driveState.oauthConnected) {
+                                "Your Drive link & backup remain saved. Tap below once to resume automatic background backups."
+                            } else {
+                                "Your existing entries are safe. Tap below to relink a writable Drive file for automatic backups."
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Button(
+                            onClick = {
+                                if (driveState.oauthConnected) {
+                                    onRefreshGoogleDriveAccess()
+                                } else {
+                                    onLinkGoogleDriveFile()
+                                }
+                            },
+                            enabled = !isBusy && !driveState.isSyncing,
+                            modifier = Modifier.testTag("drive_refresh_access_button")
+                        ) {
+                            Text(
+                                if (driveState.oauthConnected) {
+                                    "Refresh Google Drive Access"
+                                } else {
+                                    "Relink Google Drive File"
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -1180,7 +1261,8 @@ private fun GoogleDriveBackupPanel(
             SettingsListOptionRow(
                 icon = Icons.Outlined.CloudDone,
                 title = "Connect Google Drive Account",
-                badgeText = "Connect",
+                subtitle = "Connect once — auto-backups stay permanent",
+                badgeText = "Permanent",
                 badgeBg = MaterialTheme.colorScheme.primaryContainer,
                 badgeFg = MaterialTheme.colorScheme.primary,
                 enabled = !isBusy && !driveState.isSyncing,

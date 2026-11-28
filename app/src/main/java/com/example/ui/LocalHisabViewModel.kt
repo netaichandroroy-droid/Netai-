@@ -105,7 +105,8 @@ data class DriveUiState(
     val isSyncing: Boolean = false,
     val oauthConnected: Boolean = false,
     val safDocumentUri: String = "",
-    val safDisplayName: String = ""
+    val safDisplayName: String = "",
+    val needsReauth: Boolean = false
 )
 
 data class AiVoiceUiState(
@@ -238,10 +239,13 @@ class LocalHisabViewModel(
         ?: MutableStateFlow(CloudSyncUiState()).asStateFlow()
 
     private var lastSyncedDataSignature: String = ""
+    private var lastAutoBackupTriggeredSignature: String = ""
+    private var attemptedAutoRestoreFromDrive: Boolean = false
 
     init {
         lastSyncedDataSignature = computeDomainSignature()
         refreshAiCallCenterQueue()
+        maybeQueuePendingAutoBackup()
         cloudSyncRepository?.let { repo ->
             viewModelScope.launch {
                 repo.remoteUpdates.collect {
@@ -258,11 +262,47 @@ class LocalHisabViewModel(
     }
 
     private fun computeDomainSignature(): String {
-        val txPart = allTransactions.joinToString(",") { "${it.id}:${it.updatedAt?.seconds ?: 0}:${it.amount}" }
-        val memberPart = _members.value.joinToString(",") { "${it.id}:${it.isActive}:${it.code}" }
-        val takaPart = takaJomaStore?.loadAll().orEmpty().joinToString(",") { "${it.id}:${it.approvalStatus}:${it.reviewedAtMs}" }
-        val salesPart = _monthlySales.value.joinToString(",") { "${it.id}:${it.tpSales}:${it.tpPlusVat}" }
+        val currentTx = localStore.loadAll()
+        val txPart = currentTx.joinToString(",") { "${it.id}:${it.updatedAt?.seconds ?: 0}:${it.amount}:${it.date}" }
+        val memberPart = memberStore.loadAll().joinToString(",") { "${it.id}:${it.isActive}:${it.code}:${it.passwordHash.hashCode()}" }
+        val takaPart = takaJomaStore?.loadAll().orEmpty().joinToString(",") { "${it.id}:${it.approvalStatus}:${it.reviewedAtMs}:${it.amount}" }
+        val salesPart = (monthlySalesStore?.loadAll() ?: _monthlySales.value).joinToString(",") { "${it.id}:${it.tpSales}:${it.tpPlusVat}" }
         return "${txPart.hashCode()}|${memberPart.hashCode()}|${takaPart.hashCode()}|${salesPart.hashCode()}"
+    }
+
+    fun isLocalDataEmpty(): Boolean {
+        return localStore.loadAll().isEmpty() &&
+            memberStore.loadAll().isEmpty() &&
+            takaJomaStore?.loadAll().isNullOrEmpty() &&
+            (monthlySalesStore?.loadAll() ?: _monthlySales.value).isEmpty()
+    }
+
+    fun hasPendingDriveBackup(): Boolean {
+        val status = driveBackupStore?.loadStatus() ?: return false
+        if (!status.isConnected) return false
+        if (status.backupPending) return true
+        if (isLocalDataEmpty()) return false
+        if (status.lastBackupAtMs <= 0L) return true
+        val lastSig = status.lastBackedUpSignature
+        return lastSig.isBlank() || lastSig != computeDomainSignature()
+    }
+
+    private fun maybeQueuePendingAutoBackup() {
+        if (!isAdminSession) return
+        val status = driveBackupStore?.loadStatus() ?: return
+        if (!status.isConnected || !status.autoBackupEnabled) return
+        if (!hasPendingDriveBackup()) return
+        val sig = computeDomainSignature()
+        if (sig != lastAutoBackupTriggeredSignature || status.backupPending) {
+            lastAutoBackupTriggeredSignature = sig
+            _autoBackupRevision.update { it + 1 }
+        }
+    }
+
+    fun markDriveNeedsReauth(needsReauth: Boolean) {
+        _driveState.update { state ->
+            if (state.needsReauth == needsReauth) state else state.copy(needsReauth = needsReauth)
+        }
     }
 
     private fun pushCloudMutation(block: suspend CloudAutoSyncRepository.() -> Unit) {
@@ -313,6 +353,7 @@ class LocalHisabViewModel(
     }
 
     fun syncMemberToCloud(member: Member) {
+        driveBackupStore?.markBackupPending()
         cloudSyncPrefs?.markPendingUpsert(
             CloudAutoSyncRepository.COL_MEMBERS,
             CloudAutoSyncRepository.sanitizeId(member.id)
@@ -324,8 +365,10 @@ class LocalHisabViewModel(
 
     private fun notifyAdminDataChanged() {
         lastSyncedDataSignature = computeDomainSignature()
+        driveBackupStore?.markBackupPending()
         refreshAiCallCenterQueue()
         if (isAdminSession && _driveState.value.isConnected && _driveState.value.autoBackupEnabled) {
+            lastAutoBackupTriggeredSignature = lastSyncedDataSignature
             _autoBackupRevision.update { it + 1 }
         }
     }
@@ -384,6 +427,7 @@ class LocalHisabViewModel(
                     )
                 }
             }
+            maybeQueuePendingAutoBackup()
         }
         refreshAiCallCenterQueue()
     }
@@ -574,11 +618,12 @@ class LocalHisabViewModel(
     }
 
     fun buildFullBackupJson(): String {
+        val currentTx = localStore.loadAll()
         val currentTakaJoma = takaJomaStore?.loadAll() ?: _takaJomaList.value
         val currentSales = monthlySalesStore?.loadAll() ?: _monthlySales.value
         val currentMembers = if (isAdminSession) memberStore.loadAll() else emptyList()
         return BackupExporter.buildFullAppBackupJson(
-            transactions = allTransactions,
+            transactions = currentTx,
             members = currentMembers,
             memberTakaJoma = currentTakaJoma,
             monthlySales = currentSales,
@@ -587,20 +632,43 @@ class LocalHisabViewModel(
         )
     }
 
-    fun restoreFromJson(jsonText: String): Boolean {
+    fun restoreFromJson(
+        jsonText: String,
+        triggerAutoBackup: Boolean = true,
+        mergeWithExistingLocal: Boolean = true
+    ): Boolean {
         if (!isAdminSession) return false
         val parsed = BackupExporter.parseFullAppBackupJson(jsonText)
         if (parsed.isFailure) {
             _controls.update {
-                it.copy(snackbarMessage = parsed.exceptionOrNull()?.message ?: "Please select a valid JSON backup")
+                it.copy(
+                    snackbarMessage = parsed.exceptionOrNull()?.message ?: "Please select a valid JSON backup",
+                    feedbackSequence = it.feedbackSequence + 1L
+                )
             }
             return false
         }
         val backup = parsed.getOrThrow()
+        val isBackupDataEmpty = backup.transactions.isEmpty() &&
+            backup.members.isEmpty() &&
+            backup.memberTakaJoma.isEmpty() &&
+            backup.monthlySales.isEmpty()
+        if (isBackupDataEmpty && !isLocalDataEmpty()) {
+            _controls.update {
+                it.copy(
+                    snackbarMessage = "Selected backup file has no saved data yet. Your current entries were kept safe.",
+                    feedbackSequence = it.feedbackSequence + 1L
+                )
+            }
+            return false
+        }
+
         if (!backup.isFullSnapshot) {
             val now = Timestamp.now()
             val restored = backup.transactions.map { it.copy(userId = ownerUserId, createdAt = now, updatedAt = now) }
-            val combinedAll = (restored + allTransactions).sortedWith(
+            val existingLocal = localStore.loadAll()
+            val existingIds = restored.mapTo(HashSet()) { it.id }
+            val combinedAll = (restored + existingLocal.filterNot { it.id in existingIds }).sortedWith(
                 compareByDescending<HisabTransaction> { it.date }
                     .thenByDescending { it.createdAt?.seconds ?: 0L }
             )
@@ -614,14 +682,31 @@ class LocalHisabViewModel(
                 )
             }
             pushCloudMutation { restored.forEach { upsertTransaction(it) } }
-            notifyAdminDataChanged()
+            if (triggerAutoBackup) {
+                notifyAdminDataChanged()
+            } else {
+                val sig = computeDomainSignature()
+                lastSyncedDataSignature = sig
+                driveBackupStore?.clearBackupPending(sig)
+                refreshAiCallCenterQueue()
+            }
             _controls.update {
-                it.copy(snackbarMessage = "${restored.size} transactions restored")
+                it.copy(
+                    snackbarMessage = "${restored.size} transactions restored",
+                    feedbackSequence = it.feedbackSequence + 1L
+                )
             }
             return true
         }
 
-        val sortedTx = backup.transactions.sortedWith(
+        val currentLocalTx = localStore.loadAll()
+        val backupTxIds = backup.transactions.mapTo(HashSet()) { it.id }
+        val mergedTx = if (mergeWithExistingLocal && currentLocalTx.isNotEmpty()) {
+            backup.transactions + currentLocalTx.filterNot { it.id in backupTxIds }
+        } else {
+            backup.transactions
+        }
+        val sortedTx = mergedTx.sortedWith(
             compareByDescending<HisabTransaction> { it.date }
                 .thenByDescending { it.createdAt?.seconds ?: 0L }
         )
@@ -635,9 +720,16 @@ class LocalHisabViewModel(
             )
         }
 
-        memberStore.saveAll(backup.members)
+        val currentLocalMembers = memberStore.loadAll()
+        val backupMemberIds = backup.members.mapTo(HashSet()) { it.id }
+        val mergedMembers = if (mergeWithExistingLocal && currentLocalMembers.isNotEmpty()) {
+            backup.members + currentLocalMembers.filterNot { it.id in backupMemberIds }
+        } else {
+            backup.members
+        }
+        memberStore.saveAll(mergedMembers)
         _members.value = memberStore.loadAll()
-        backup.members.forEach {
+        mergedMembers.forEach {
             cloudSyncPrefs?.markPendingUpsert(
                 CloudAutoSyncRepository.COL_MEMBERS,
                 CloudAutoSyncRepository.sanitizeId(it.id)
@@ -645,9 +737,16 @@ class LocalHisabViewModel(
         }
 
         takaJomaStore?.let { store ->
-            store.saveAll(backup.memberTakaJoma)
+            val currentLocalTaka = store.loadAll()
+            val backupTakaIds = backup.memberTakaJoma.mapTo(HashSet()) { it.id }
+            val mergedTaka = if (mergeWithExistingLocal && currentLocalTaka.isNotEmpty()) {
+                backup.memberTakaJoma + currentLocalTaka.filterNot { it.id in backupTakaIds }
+            } else {
+                backup.memberTakaJoma
+            }
+            store.saveAll(mergedTaka)
             _takaJomaList.value = loadScopedTakaJoma()
-            backup.memberTakaJoma.forEach {
+            mergedTaka.forEach {
                 cloudSyncPrefs?.markPendingUpsert(
                     CloudAutoSyncRepository.COL_TAKA_JOMA,
                     CloudAutoSyncRepository.sanitizeId(it.id)
@@ -656,9 +755,16 @@ class LocalHisabViewModel(
         }
 
         monthlySalesStore?.let { store ->
-            store.saveAll(backup.monthlySales)
+            val currentLocalSales = store.loadAll()
+            val backupSalesIds = backup.monthlySales.mapTo(HashSet()) { it.id }
+            val mergedSales = if (mergeWithExistingLocal && currentLocalSales.isNotEmpty()) {
+                backup.monthlySales + currentLocalSales.filterNot { it.id in backupSalesIds }
+            } else {
+                backup.monthlySales
+            }
+            store.saveAll(mergedSales)
             _monthlySales.value = store.loadAll()
-            backup.monthlySales.forEach {
+            mergedSales.forEach {
                 cloudSyncPrefs?.markPendingUpsert(
                     CloudAutoSyncRepository.COL_MONTHLY_SALES,
                     CloudAutoSyncRepository.sanitizeId(it.id)
@@ -684,7 +790,16 @@ class LocalHisabViewModel(
         }
 
         pushCloudMutation { syncAllNow() }
-        notifyAdminDataChanged()
+        val localHadExtraEntries = (mergedTx.size > backup.transactions.size) ||
+            (mergedMembers.size > backup.members.size)
+        if (triggerAutoBackup || localHadExtraEntries) {
+            notifyAdminDataChanged()
+        } else {
+            val sig = computeDomainSignature()
+            lastSyncedDataSignature = sig
+            driveBackupStore?.clearBackupPending(sig)
+            refreshAiCallCenterQueue()
+        }
         _controls.update {
             it.copy(
                 snackbarMessage = "All data restored (${backup.buildBanglaSummary()})",
@@ -697,45 +812,236 @@ class LocalHisabViewModel(
     fun completeDriveConnect(
         accessToken: String,
         hintEmail: String = "",
-        onUnauthorized: suspend () -> Unit = {}
+        silent: Boolean = false,
+        autoRestoreIfLocalEmpty: Boolean = true,
+        onUnauthorized: suspend () -> Unit = {},
+        onRefreshTokenAfter401: (suspend (String) -> com.example.data.DriveTokenResult)? = null,
+        onNeedsConsent: ((android.content.Intent, String) -> Unit)? = null
     ) {
         if (!isAdminSession) return
         viewModelScope.launch {
             _driveState.update { it.copy(isSyncing = true) }
-            val result = withContext(Dispatchers.IO) {
-                val fetchedEmail = GoogleDriveBackupClient.fetchUserEmail(accessToken).orEmpty()
-                val resolvedEmail = fetchedEmail.ifBlank { hintEmail.trim() }
-                val findRes = GoogleDriveBackupClient.findBackupFile(accessToken)
-                Triple(resolvedEmail, findRes.getOrNull(), findRes.exceptionOrNull())
+            var activeToken = accessToken
+            var resolvedEmail = hintEmail.trim()
+            var findRes = withContext(Dispatchers.IO) {
+                val fetchedEmail = GoogleDriveBackupClient.fetchUserEmail(activeToken).orEmpty()
+                if (fetchedEmail.isNotBlank()) resolvedEmail = fetchedEmail
+                GoogleDriveBackupClient.findBackupFile(activeToken)
             }
-            val (email, existingMeta, findErr) = result
+            if (findRes.exceptionOrNull() is DriveUnauthorizedException) {
+                onUnauthorized()
+                val retryToken = resolveRefreshedToken(
+                    resolvedEmail = resolvedEmail,
+                    onRefreshTokenAfter401 = onRefreshTokenAfter401,
+                    silent = silent,
+                    onNeedsConsent = onNeedsConsent
+                )
+                if (retryToken != null) {
+                    activeToken = retryToken
+                    findRes = withContext(Dispatchers.IO) {
+                        val fetchedEmail = GoogleDriveBackupClient.fetchUserEmail(activeToken).orEmpty()
+                        if (fetchedEmail.isNotBlank()) resolvedEmail = fetchedEmail
+                        GoogleDriveBackupClient.findBackupFile(activeToken)
+                    }
+                } else {
+                    _driveState.update { it.copy(isSyncing = false) }
+                    return@launch
+                }
+            }
+
+            val findErr = findRes.exceptionOrNull()
             if (findErr is DriveUnauthorizedException) {
                 onUnauthorized()
-                _driveState.update { it.copy(isSyncing = false) }
-                showMessage(findErr.localizedMessage ?: "Google Drive authorization expired. Please reconnect.")
+                _driveState.update { it.copy(isSyncing = false, needsReauth = true) }
+                if (!silent) {
+                    showMessage(findErr.localizedMessage ?: "Google Drive authorization expired. Please reconnect.")
+                }
                 return@launch
             }
-            driveBackupStore?.saveConnectedAccount(email)
+
+            val existingMeta = findRes.getOrNull()
+            driveBackupStore?.saveConnectedAccount(resolvedEmail)
             if (existingMeta != null) {
                 driveBackupStore?.updateBackupMetadata(
                     fileId = existingMeta.id,
                     timestampMs = _driveState.value.lastBackupAtMs,
                     summary = _driveState.value.lastBackupSummary,
-                    email = email
+                    email = resolvedEmail,
+                    clearPending = false
                 )
             }
             _driveState.update { state ->
                 state.copy(
                     isConnected = true,
                     oauthConnected = true,
-                    connectedEmail = email.ifBlank { state.connectedEmail },
+                    connectedEmail = resolvedEmail.ifBlank { state.connectedEmail },
                     driveFileId = existingMeta?.id ?: state.driveFileId,
-                    isSyncing = false
+                    needsReauth = false
                 )
             }
+
+            if (existingMeta != null && autoRestoreIfLocalEmpty && isLocalDataEmpty()) {
+                val downloadRes = withContext(Dispatchers.IO) {
+                    GoogleDriveBackupClient.downloadFullBackup(activeToken, existingMeta.id)
+                }
+                downloadRes.onSuccess { (meta, jsonPayload) ->
+                    val restoredOk = restoreFromJson(jsonPayload, triggerAutoBackup = false)
+                    if (restoredOk) {
+                        val nowMs = System.currentTimeMillis()
+                        val summary = buildCurrentBackupSummary()
+                        val sig = computeDomainSignature()
+                        driveBackupStore?.updateBackupMetadata(
+                            fileId = meta.id,
+                            timestampMs = nowMs,
+                            summary = summary,
+                            email = resolvedEmail,
+                            backedUpSignature = sig
+                        )
+                        _driveState.update { state ->
+                            state.copy(
+                                isConnected = true,
+                                oauthConnected = true,
+                                connectedEmail = resolvedEmail.ifBlank { state.connectedEmail },
+                                driveFileId = meta.id,
+                                lastBackupAtMs = nowMs,
+                                lastBackupSummary = summary,
+                                isSyncing = false,
+                                needsReauth = false
+                            )
+                        }
+                        syncPersistedDriveConfigToCloud()
+                        showMessage("Google Drive connected & backup data restored")
+                        return@launch
+                    }
+                }
+            } else if (existingMeta == null && !isLocalDataEmpty()) {
+                val jsonPayload = buildFullBackupJson()
+                val summaryText = buildCurrentBackupSummary()
+                val uploadRes = withContext(Dispatchers.IO) {
+                    GoogleDriveBackupClient.uploadFullBackup(
+                        accessToken = activeToken,
+                        knownFileId = _driveState.value.driveFileId.takeIf { it.isNotBlank() },
+                        jsonPayload = jsonPayload
+                    )
+                }
+                uploadRes.onSuccess { meta ->
+                    val nowMs = System.currentTimeMillis()
+                    val sig = computeDomainSignature()
+                    driveBackupStore?.updateBackupMetadata(
+                        fileId = meta.id,
+                        timestampMs = nowMs,
+                        summary = summaryText,
+                        email = resolvedEmail,
+                        backedUpSignature = sig
+                    )
+                    _driveState.update { state ->
+                        state.copy(
+                            isConnected = true,
+                            oauthConnected = true,
+                            connectedEmail = resolvedEmail.ifBlank { state.connectedEmail },
+                            driveFileId = meta.id,
+                            lastBackupAtMs = nowMs,
+                            lastBackupSummary = summaryText,
+                            isSyncing = false,
+                            needsReauth = false
+                        )
+                    }
+                    syncPersistedDriveConfigToCloud()
+                    val emailText = if (resolvedEmail.isNotBlank()) " ($resolvedEmail)" else ""
+                    if (!silent) {
+                        showMessage("Google Drive connected & initial backup saved$emailText")
+                    }
+                    return@launch
+                }
+            }
+
+            _driveState.update { it.copy(isSyncing = false, needsReauth = false) }
             syncPersistedDriveConfigToCloud()
-            val emailText = if (email.isNotBlank()) " ($email)" else ""
-            showMessage("Google Drive connected$emailText")
+            if (hasPendingDriveBackup() && _driveState.value.autoBackupEnabled) {
+                maybeQueuePendingAutoBackup()
+            }
+            if (!silent) {
+                val emailText = if (resolvedEmail.isNotBlank()) " ($resolvedEmail)" else ""
+                showMessage("Google Drive connected$emailText")
+            }
+        }
+    }
+
+    fun restoreFromDriveIfLocalEmpty(
+        accessToken: String,
+        hintEmail: String = "",
+        onUnauthorized: suspend () -> Unit = {},
+        onRefreshTokenAfter401: (suspend (String) -> com.example.data.DriveTokenResult)? = null
+    ) {
+        if (!isAdminSession || attemptedAutoRestoreFromDrive || !isLocalDataEmpty()) return
+        attemptedAutoRestoreFromDrive = true
+        viewModelScope.launch {
+            _driveState.update { it.copy(isSyncing = true) }
+            val knownFileId = _driveState.value.driveFileId.takeIf { it.isNotBlank() }
+            var activeToken = accessToken
+            var email = _driveState.value.connectedEmail.ifBlank { hintEmail.trim() }
+            var downloadRes = withContext(Dispatchers.IO) {
+                if (email.isBlank()) {
+                    email = GoogleDriveBackupClient.fetchUserEmail(activeToken).orEmpty().ifBlank { hintEmail.trim() }
+                }
+                GoogleDriveBackupClient.downloadFullBackup(activeToken, knownFileId)
+            }
+            if (downloadRes.exceptionOrNull() is DriveUnauthorizedException) {
+                onUnauthorized()
+                val retryToken = resolveRefreshedToken(
+                    resolvedEmail = email,
+                    onRefreshTokenAfter401 = onRefreshTokenAfter401,
+                    silent = true,
+                    onNeedsConsent = null
+                )
+                if (retryToken != null) {
+                    activeToken = retryToken
+                    downloadRes = withContext(Dispatchers.IO) {
+                        GoogleDriveBackupClient.downloadFullBackup(activeToken, knownFileId)
+                    }
+                }
+            }
+            downloadRes.onSuccess { (meta, jsonPayload) ->
+                if (!isLocalDataEmpty()) {
+                    _driveState.update { it.copy(isSyncing = false, needsReauth = false) }
+                    return@onSuccess
+                }
+                val restoredOk = restoreFromJson(jsonPayload, triggerAutoBackup = false)
+                if (restoredOk) {
+                    val nowMs = System.currentTimeMillis()
+                    val summary = buildCurrentBackupSummary()
+                    val sig = computeDomainSignature()
+                    driveBackupStore?.updateBackupMetadata(
+                        fileId = meta.id,
+                        timestampMs = nowMs,
+                        summary = summary,
+                        email = email,
+                        backedUpSignature = sig
+                    )
+                    _driveState.update { state ->
+                        state.copy(
+                            isConnected = true,
+                            oauthConnected = true,
+                            connectedEmail = email.ifBlank { state.connectedEmail },
+                            driveFileId = meta.id,
+                            lastBackupAtMs = nowMs,
+                            lastBackupSummary = summary,
+                            isSyncing = false,
+                            needsReauth = false
+                        )
+                    }
+                    syncPersistedDriveConfigToCloud()
+                } else {
+                    _driveState.update { it.copy(isSyncing = false, needsReauth = false) }
+                }
+            }.onFailure { err ->
+                if (err is DriveUnauthorizedException) {
+                    onUnauthorized()
+                    _driveState.update { it.copy(isSyncing = false, needsReauth = true) }
+                } else {
+                    _driveState.update { it.copy(isSyncing = false) }
+                }
+            }
         }
     }
 
@@ -743,44 +1049,69 @@ class LocalHisabViewModel(
         accessToken: String,
         silent: Boolean = false,
         hintEmail: String = "",
-        onUnauthorized: suspend () -> Unit = {}
+        onUnauthorized: suspend () -> Unit = {},
+        onRefreshTokenAfter401: (suspend (String) -> com.example.data.DriveTokenResult)? = null,
+        onNeedsConsent: ((android.content.Intent, String) -> Unit)? = null
     ) {
         if (!isAdminSession) return
+        val knownFileId = _driveState.value.driveFileId.takeIf { it.isNotBlank() }
+        if (silent && isLocalDataEmpty() && (knownFileId != null || _driveState.value.lastBackupAtMs > 0L)) {
+            // Never silently overwrite an existing Drive backup with empty local state
+            return
+        }
         val jsonPayload = buildFullBackupJson()
-        val currentTaka = takaJomaStore?.loadAll() ?: _takaJomaList.value
-        val currentSales = monthlySalesStore?.loadAll() ?: _monthlySales.value
-        val summaryText = listOf(
-            "${allTransactions.size} transactions",
-            "${_members.value.size} members",
-            "${currentTaka.size} deposits",
-            "${currentSales.size} sales"
-        ).joinToString(" • ")
+        val summaryText = buildCurrentBackupSummary()
+        val sigAtBackup = computeDomainSignature()
 
         viewModelScope.launch {
             _driveState.update { it.copy(isSyncing = true) }
-            val knownFileId = _driveState.value.driveFileId.takeIf { it.isNotBlank() }
-            val uploadOutcome = withContext(Dispatchers.IO) {
-                val email = if (_driveState.value.connectedEmail.isBlank()) {
-                    GoogleDriveBackupClient.fetchUserEmail(accessToken).orEmpty()
+            var activeToken = accessToken
+            var email = if (_driveState.value.connectedEmail.isBlank()) {
+                hintEmail.trim()
+            } else {
+                _driveState.value.connectedEmail
+            }
+            var uploadRes = withContext(Dispatchers.IO) {
+                if (email.isBlank()) {
+                    email = GoogleDriveBackupClient.fetchUserEmail(activeToken).orEmpty()
                         .ifBlank { hintEmail.trim() }
-                } else {
-                    _driveState.value.connectedEmail
                 }
-                val uploadRes = GoogleDriveBackupClient.uploadFullBackup(
-                    accessToken = accessToken,
+                GoogleDriveBackupClient.uploadFullBackup(
+                    accessToken = activeToken,
                     knownFileId = knownFileId,
                     jsonPayload = jsonPayload
                 )
-                email to uploadRes
             }
-            val (email, uploadRes) = uploadOutcome
+            if (uploadRes.exceptionOrNull() is DriveUnauthorizedException) {
+                onUnauthorized()
+                val retryToken = resolveRefreshedToken(
+                    resolvedEmail = email,
+                    onRefreshTokenAfter401 = onRefreshTokenAfter401,
+                    silent = silent,
+                    onNeedsConsent = onNeedsConsent
+                )
+                if (retryToken != null) {
+                    activeToken = retryToken
+                    uploadRes = withContext(Dispatchers.IO) {
+                        GoogleDriveBackupClient.uploadFullBackup(
+                            accessToken = activeToken,
+                            knownFileId = knownFileId,
+                            jsonPayload = jsonPayload
+                        )
+                    }
+                } else {
+                    _driveState.update { it.copy(isSyncing = false) }
+                    return@launch
+                }
+            }
             uploadRes.onSuccess { meta ->
                 val nowMs = System.currentTimeMillis()
                 driveBackupStore?.updateBackupMetadata(
                     fileId = meta.id,
                     timestampMs = nowMs,
                     summary = summaryText,
-                    email = email
+                    email = email,
+                    backedUpSignature = sigAtBackup
                 )
                 _driveState.update { state ->
                     state.copy(
@@ -790,7 +1121,8 @@ class LocalHisabViewModel(
                         driveFileId = meta.id,
                         lastBackupAtMs = nowMs,
                         lastBackupSummary = summaryText,
-                        isSyncing = false
+                        isSyncing = false,
+                        needsReauth = false
                     )
                 }
                 syncPersistedDriveConfigToCloud()
@@ -800,8 +1132,10 @@ class LocalHisabViewModel(
             }.onFailure { err ->
                 if (err is DriveUnauthorizedException) {
                     onUnauthorized()
+                    _driveState.update { it.copy(isSyncing = false, needsReauth = true) }
+                } else {
+                    _driveState.update { it.copy(isSyncing = false) }
                 }
-                _driveState.update { it.copy(isSyncing = false) }
                 if (!silent) {
                     showMessage(err.localizedMessage ?: "Google Drive backup failed")
                 }
@@ -812,36 +1146,63 @@ class LocalHisabViewModel(
     fun restoreAllFromGoogleDrive(
         accessToken: String,
         hintEmail: String = "",
-        onUnauthorized: suspend () -> Unit = {}
+        onUnauthorized: suspend () -> Unit = {},
+        onRefreshTokenAfter401: (suspend (String) -> com.example.data.DriveTokenResult)? = null,
+        onNeedsConsent: ((android.content.Intent, String) -> Unit)? = null
     ) {
         if (!isAdminSession) return
         viewModelScope.launch {
             _driveState.update { it.copy(isSyncing = true) }
             val knownFileId = _driveState.value.driveFileId.takeIf { it.isNotBlank() }
-            val downloadOutcome = withContext(Dispatchers.IO) {
-                val email = if (_driveState.value.connectedEmail.isBlank()) {
-                    GoogleDriveBackupClient.fetchUserEmail(accessToken).orEmpty()
+            var activeToken = accessToken
+            var email = if (_driveState.value.connectedEmail.isBlank()) {
+                hintEmail.trim()
+            } else {
+                _driveState.value.connectedEmail
+            }
+            var downloadRes = withContext(Dispatchers.IO) {
+                if (email.isBlank()) {
+                    email = GoogleDriveBackupClient.fetchUserEmail(activeToken).orEmpty()
                         .ifBlank { hintEmail.trim() }
-                } else {
-                    _driveState.value.connectedEmail
                 }
-                val downloadRes = GoogleDriveBackupClient.downloadFullBackup(
-                    accessToken = accessToken,
+                GoogleDriveBackupClient.downloadFullBackup(
+                    accessToken = activeToken,
                     knownFileId = knownFileId
                 )
-                email to downloadRes
             }
-            val (email, downloadRes) = downloadOutcome
+            if (downloadRes.exceptionOrNull() is DriveUnauthorizedException) {
+                onUnauthorized()
+                val retryToken = resolveRefreshedToken(
+                    resolvedEmail = email,
+                    onRefreshTokenAfter401 = onRefreshTokenAfter401,
+                    silent = false,
+                    onNeedsConsent = onNeedsConsent
+                )
+                if (retryToken != null) {
+                    activeToken = retryToken
+                    downloadRes = withContext(Dispatchers.IO) {
+                        GoogleDriveBackupClient.downloadFullBackup(
+                            accessToken = activeToken,
+                            knownFileId = knownFileId
+                        )
+                    }
+                } else {
+                    _driveState.update { it.copy(isSyncing = false) }
+                    return@launch
+                }
+            }
             downloadRes.onSuccess { (meta, jsonPayload) ->
-                val restoredOk = restoreFromJson(jsonPayload)
+                val restoredOk = restoreFromJson(jsonPayload, triggerAutoBackup = false)
                 if (restoredOk) {
                     val nowMs = System.currentTimeMillis()
-                    val summary = "${allTransactions.size} transactions • ${_members.value.size} members"
+                    val summary = buildCurrentBackupSummary()
+                    val sig = computeDomainSignature()
                     driveBackupStore?.updateBackupMetadata(
                         fileId = meta.id,
                         timestampMs = nowMs,
                         summary = summary,
-                        email = email
+                        email = email,
+                        backedUpSignature = sig
                     )
                     _driveState.update { state ->
                         state.copy(
@@ -851,21 +1212,65 @@ class LocalHisabViewModel(
                             driveFileId = meta.id,
                             lastBackupAtMs = nowMs,
                             lastBackupSummary = summary,
-                            isSyncing = false
+                            isSyncing = false,
+                            needsReauth = false
                         )
                     }
                     syncPersistedDriveConfigToCloud()
                 } else {
-                    _driveState.update { it.copy(isSyncing = false) }
+                    _driveState.update { it.copy(isSyncing = false, needsReauth = false) }
                 }
             }.onFailure { err ->
                 if (err is DriveUnauthorizedException) {
                     onUnauthorized()
+                    _driveState.update { it.copy(isSyncing = false, needsReauth = true) }
+                } else {
+                    _driveState.update { it.copy(isSyncing = false) }
                 }
-                _driveState.update { it.copy(isSyncing = false) }
                 showMessage(err.localizedMessage ?: "Failed to restore from Google Drive")
             }
         }
+    }
+
+    private suspend fun resolveRefreshedToken(
+        resolvedEmail: String,
+        onRefreshTokenAfter401: (suspend (String) -> com.example.data.DriveTokenResult)?,
+        silent: Boolean,
+        onNeedsConsent: ((android.content.Intent, String) -> Unit)?
+    ): String? {
+        val refresher = onRefreshTokenAfter401 ?: return null
+        return when (val refreshed = refresher(resolvedEmail)) {
+            is com.example.data.DriveTokenResult.Success -> {
+                _driveState.update { it.copy(needsReauth = false) }
+                refreshed.accessToken
+            }
+            is com.example.data.DriveTokenResult.NeedsConsent -> {
+                _driveState.update { it.copy(needsReauth = true) }
+                if (!silent) {
+                    onNeedsConsent?.invoke(refreshed.intent, refreshed.accountEmail)
+                }
+                null
+            }
+            is com.example.data.DriveTokenResult.Failure -> {
+                if (!silent) {
+                    showMessage(refreshed.message)
+                }
+                null
+            }
+        }
+    }
+
+    private fun buildCurrentBackupSummary(): String {
+        val currentTx = localStore.loadAll()
+        val currentTaka = takaJomaStore?.loadAll() ?: _takaJomaList.value
+        val currentSales = monthlySalesStore?.loadAll() ?: _monthlySales.value
+        val currentMembers = memberStore.loadAll()
+        return listOf(
+            "${currentTx.size} transactions",
+            "${currentMembers.size} members",
+            "${currentTaka.size} deposits",
+            "${currentSales.size} sales"
+        ).joinToString(" • ")
     }
 
     fun connectAndBackupSafUri(
@@ -877,8 +1282,8 @@ class LocalHisabViewModel(
         val appContext = context.applicationContext
         val uriString = uri.toString()
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                GoogleDriveBackupClient.persistSafPermission(appContext, uri)
+            val perm = withContext(Dispatchers.IO) {
+                GoogleDriveBackupClient.persistSafPermissionWithDetails(appContext, uri)
             }
             val displayName = withContext(Dispatchers.IO) {
                 GoogleDriveBackupClient.resolveSafDisplayName(appContext, uri)
@@ -893,7 +1298,8 @@ class LocalHisabViewModel(
                     isConnected = true,
                     safDocumentUri = uriString,
                     safDisplayName = displayName,
-                    connectedEmail = state.connectedEmail.ifBlank { emailHint.trim() }
+                    connectedEmail = state.connectedEmail.ifBlank { emailHint.trim() },
+                    needsReauth = !perm.canWrite
                 )
             }
             backupAllToSafUri(
@@ -912,16 +1318,13 @@ class LocalHisabViewModel(
         emailHint: String = ""
     ) {
         if (!isAdminSession || uriString.isBlank()) return
+        if (silent && isLocalDataEmpty() && _driveState.value.lastBackupAtMs > 0L) {
+            return
+        }
         val appContext = context.applicationContext
         val jsonPayload = buildFullBackupJson()
-        val currentTaka = takaJomaStore?.loadAll() ?: _takaJomaList.value
-        val currentSales = monthlySalesStore?.loadAll() ?: _monthlySales.value
-        val summaryText = listOf(
-            "${allTransactions.size} transactions",
-            "${_members.value.size} members",
-            "${currentTaka.size} deposits",
-            "${currentSales.size} sales"
-        ).joinToString(" • ")
+        val summaryText = buildCurrentBackupSummary()
+        val sigAtBackup = computeDomainSignature()
 
         viewModelScope.launch {
             _driveState.update { it.copy(isSyncing = true) }
@@ -935,7 +1338,8 @@ class LocalHisabViewModel(
                     displayName = displayName,
                     timestampMs = nowMs,
                     summary = summaryText,
-                    email = emailHint
+                    email = emailHint,
+                    backedUpSignature = sigAtBackup
                 )
                 _driveState.update { state ->
                     state.copy(
@@ -945,7 +1349,8 @@ class LocalHisabViewModel(
                         connectedEmail = state.connectedEmail.ifBlank { emailHint.trim() },
                         lastBackupAtMs = nowMs,
                         lastBackupSummary = summaryText,
-                        isSyncing = false
+                        isSyncing = false,
+                        needsReauth = false
                     )
                 }
                 syncPersistedDriveConfigToCloud()
@@ -953,7 +1358,16 @@ class LocalHisabViewModel(
                     showMessage("Saved all data to Google Drive file ($displayName)")
                 }
             }.onFailure { err ->
-                _driveState.update { it.copy(isSyncing = false) }
+                val isPermissionIssue = err is SecurityException ||
+                    err.message?.contains("denied", ignoreCase = true) == true ||
+                    err.message?.contains("permission", ignoreCase = true) == true ||
+                    err.message?.contains("read-only", ignoreCase = true) == true
+                _driveState.update {
+                    it.copy(
+                        isSyncing = false,
+                        needsReauth = it.needsReauth || isPermissionIssue
+                    )
+                }
                 if (!silent) {
                     showMessage(err.localizedMessage ?: "Backup to Google Drive file failed. Please relink the file.")
                 }
@@ -972,41 +1386,63 @@ class LocalHisabViewModel(
         val uri = uriString.toUri()
         viewModelScope.launch {
             _driveState.update { it.copy(isSyncing = true) }
-            val readRes = withContext(Dispatchers.IO) {
-                if (persistPermission) {
-                    GoogleDriveBackupClient.persistSafPermission(appContext, uri)
+            val perm = if (persistPermission) {
+                withContext(Dispatchers.IO) {
+                    GoogleDriveBackupClient.persistSafPermissionWithDetails(appContext, uri)
                 }
+            } else {
+                null
+            }
+            val readRes = withContext(Dispatchers.IO) {
                 GoogleDriveBackupClient.readJsonFromSafUri(appContext, uriString)
             }
             readRes.onSuccess { (displayName, jsonText) ->
-                val restoredOk = restoreFromJson(jsonText)
+                val restoredOk = restoreFromJson(jsonText, triggerAutoBackup = false)
+                val existingSafUri = _driveState.value.safDocumentUri
+                val canWritePickedFile = perm?.canWrite ?: (existingSafUri == uriString)
+                val keepSaf = existingSafUri == uriString || (persistPermission && canWritePickedFile)
+
                 if (restoredOk) {
                     val nowMs = System.currentTimeMillis()
-                    val summary = "${allTransactions.size} transactions • ${_members.value.size} members"
-                    if (persistPermission || _driveState.value.safDocumentUri == uriString) {
+                    val summary = buildCurrentBackupSummary()
+                    val sig = computeDomainSignature()
+                    if (keepSaf) {
                         driveBackupStore?.updateSafBackupMetadata(
                             uriString = uriString,
                             displayName = displayName,
                             timestampMs = nowMs,
                             summary = summary,
-                            email = emailHint
+                            email = emailHint,
+                            backedUpSignature = sig,
+                            clearPending = !hasPendingDriveBackup()
                         )
                     }
                     _driveState.update { state ->
-                        val keepSaf = persistPermission || state.safDocumentUri == uriString
                         state.copy(
                             isConnected = state.isConnected || keepSaf,
                             safDocumentUri = if (keepSaf) uriString else state.safDocumentUri,
                             safDisplayName = if (keepSaf) displayName else state.safDisplayName,
                             connectedEmail = state.connectedEmail.ifBlank { emailHint.trim() },
-                            lastBackupAtMs = nowMs,
-                            lastBackupSummary = summary,
-                            isSyncing = false
+                            lastBackupAtMs = if (keepSaf) nowMs else state.lastBackupAtMs,
+                            lastBackupSummary = if (keepSaf) summary else state.lastBackupSummary,
+                            isSyncing = false,
+                            needsReauth = if (keepSaf) false else state.needsReauth
                         )
                     }
-                    syncPersistedDriveConfigToCloud()
+                    if (keepSaf) {
+                        syncPersistedDriveConfigToCloud()
+                    } else if (persistPermission && !canWritePickedFile && existingSafUri.isBlank()) {
+                        showMessage("Data restored! Tap 'Link Google Drive File' once so new entries auto-save to Drive.")
+                    }
                 } else {
-                    _driveState.update { it.copy(isSyncing = false) }
+                    _driveState.update { state ->
+                        state.copy(
+                            isSyncing = false,
+                            isConnected = state.isConnected || keepSaf,
+                            safDocumentUri = if (keepSaf) uriString else state.safDocumentUri,
+                            safDisplayName = if (keepSaf) displayName else state.safDisplayName
+                        )
+                    }
                 }
             }.onFailure { err ->
                 _driveState.update { it.copy(isSyncing = false) }

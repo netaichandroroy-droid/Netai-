@@ -136,6 +136,84 @@ class CloudSyncPrefsStore(context: Context) {
         }
     }
 
+    fun getConfirmedServerIds(uid: String, collection: String): Set<String> {
+        val cleanUid = uid.trim()
+        val col = collection.trim()
+        if (cleanUid.isEmpty() || col.isEmpty()) return emptySet()
+        synchronized(pendingLock) {
+            return readStringSetLocked(confirmedKey(cleanUid, col))
+        }
+    }
+
+    fun addConfirmedServerIds(uid: String, collection: String, docIds: Collection<String>) {
+        val cleanUid = uid.trim()
+        val col = collection.trim()
+        if (cleanUid.isEmpty() || col.isEmpty() || docIds.isEmpty()) return
+        synchronized(pendingLock) {
+            val key = confirmedKey(cleanUid, col)
+            val current = readStringSetLocked(key).toMutableSet()
+            var changed = false
+            docIds.forEach { raw ->
+                val clean = raw.trim()
+                if (clean.isNotEmpty() && current.add(clean)) {
+                    changed = true
+                }
+            }
+            if (changed) {
+                writeStringSetLocked(key, current)
+            }
+        }
+    }
+
+    fun removeConfirmedServerId(uid: String, collection: String, docId: String) {
+        val cleanUid = uid.trim()
+        val col = collection.trim()
+        val id = docId.trim()
+        if (cleanUid.isEmpty() || col.isEmpty() || id.isEmpty()) return
+        synchronized(pendingLock) {
+            val key = confirmedKey(cleanUid, col)
+            val current = readStringSetLocked(key).toMutableSet()
+            if (current.remove(id)) {
+                writeStringSetLocked(key, current)
+            }
+        }
+    }
+
+    fun replaceConfirmedServerIds(uid: String, collection: String, docIds: Collection<String>) {
+        val cleanUid = uid.trim()
+        val col = collection.trim()
+        if (cleanUid.isEmpty() || col.isEmpty()) return
+        synchronized(pendingLock) {
+            val cleanSet = docIds.mapNotNullTo(LinkedHashSet()) { it.trim().takeIf { s -> s.isNotEmpty() } }
+            writeStringSetLocked(confirmedKey(cleanUid, col), cleanSet)
+        }
+    }
+
+    private fun confirmedKey(uid: String, collection: String): String =
+        "${KEY_CONFIRMED_PREFIX}${uid}_$collection"
+
+    private fun readStringSetLocked(key: String): Set<String> {
+        val raw = prefs.getString(key, null).orEmpty()
+        if (raw.isBlank()) return emptySet()
+        return runCatching {
+            val arr = JSONArray(raw)
+            val set = LinkedHashSet<String>()
+            for (i in 0 until arr.length()) {
+                val item = arr.optString(i, "").trim()
+                if (item.isNotEmpty()) set.add(item)
+            }
+            set
+        }.getOrElse { emptySet() }
+    }
+
+    private fun writeStringSetLocked(key: String, ids: Set<String>) {
+        val arr = JSONArray()
+        ids.forEach { arr.put(it) }
+        prefs.edit(commit = true) {
+            putString(key, arr.toString())
+        }
+    }
+
     private fun readMapLocked(key: String): MutableMap<String, MutableSet<String>> {
         val raw = prefs.getString(key, null).orEmpty()
         if (raw.isBlank()) return LinkedHashMap()
@@ -196,6 +274,7 @@ class CloudSyncPrefsStore(context: Context) {
         private const val KEY_EXPLICIT_GOOGLE_SIGN_OUT = "explicit_google_sign_out"
         private const val KEY_LAST_SYNCED_AT_MS = "last_synced_at_ms"
         private const val KEY_SEEDED_PREFIX = "seeded_uid_"
+        private const val KEY_CONFIRMED_PREFIX = "confirmed_ids_"
         private const val KEY_PENDING_UPSERTS = "pending_upserts_json"
         private const val KEY_PENDING_DELETES = "pending_deletes_json"
     }

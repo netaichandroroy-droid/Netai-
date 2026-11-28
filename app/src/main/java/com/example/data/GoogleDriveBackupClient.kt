@@ -5,6 +5,8 @@ import android.accounts.AccountManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.core.net.toUri
 import com.google.android.gms.auth.GoogleAuthException
@@ -20,6 +22,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.FileOutputStream
 import java.io.IOException
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
@@ -28,6 +31,11 @@ data class DriveFileMeta(
     val id: String,
     val name: String,
     val modifiedTime: String = ""
+)
+
+data class SafPermissionStatus(
+    val persisted: Boolean,
+    val canWrite: Boolean
 )
 
 class DriveUnauthorizedException(message: String) : IllegalStateException(message)
@@ -313,17 +321,58 @@ object GoogleDriveBackupClient {
     }
 
     fun persistSafPermission(context: Context, uri: Uri): Boolean {
-        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        return runCatching {
-            context.applicationContext.contentResolver.takePersistableUriPermission(uri, flags)
-            true
-        }.recoverCatching {
-            context.applicationContext.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
+        return persistSafPermissionWithDetails(context, uri).persisted
+    }
+
+    fun persistSafPermissionWithDetails(context: Context, uri: Uri): SafPermissionStatus {
+        val resolver = context.applicationContext.contentResolver
+        val rwFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val tookRw = runCatching {
+            resolver.takePersistableUriPermission(uri, rwFlags)
             true
         }.getOrDefault(false)
+        if (!tookRw) {
+            runCatching {
+                resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+        val persistedEntry = runCatching {
+            resolver.persistedUriPermissions.firstOrNull { it.uri == uri }
+        }.getOrNull()
+        val persisted = persistedEntry != null || tookRw
+        val supportsDocWrite = runCatching {
+            resolver.query(
+                uri,
+                arrayOf(DocumentsContract.Document.COLUMN_FLAGS),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_FLAGS)
+                    if (idx >= 0) {
+                        val docFlags = cursor.getInt(idx)
+                        (docFlags and DocumentsContract.Document.FLAG_SUPPORTS_WRITE) != 0
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                }
+            } ?: true
+        }.getOrDefault(true)
+        val canWrite = (persistedEntry?.isWritePermission ?: tookRw) && supportsDocWrite
+        return SafPermissionStatus(persisted = persisted, canWrite = canWrite)
+    }
+
+    fun hasSafWritePermission(context: Context, uriString: String): Boolean {
+        if (uriString.isBlank()) return false
+        val uri = runCatching { uriString.toUri() }.getOrNull() ?: return false
+        val persisted = runCatching {
+            context.applicationContext.contentResolver.persistedUriPermissions
+                .firstOrNull { it.uri == uri }
+        }.getOrNull() ?: return false
+        return persisted.isWritePermission
     }
 
     fun releaseSafPermission(context: Context, uriString: String) {
@@ -364,13 +413,52 @@ object GoogleDriveBackupClient {
             val uri = uriString.toUri()
             val resolver = context.applicationContext.contentResolver
             val bytes = jsonPayload.toByteArray(Charsets.UTF_8)
-            val outStream = runCatching { resolver.openOutputStream(uri, "wt") }.getOrNull()
-                ?: resolver.openOutputStream(uri, "w")
-                ?: resolver.openOutputStream(uri)
-                ?: throw IllegalStateException("Write permission for the Google Drive file was denied. Please link the file again.")
-            outStream.use { out ->
-                out.write(bytes)
-                out.flush()
+            var lastError: Throwable? = null
+            var wrote = false
+
+            // Prefer ParcelFileDescriptor with explicit truncate/sync for Google Drive & cloud providers
+            for (mode in listOf("wt", "rwt", "w")) {
+                val pfd = runCatching { resolver.openFileDescriptor(uri, mode) }
+                    .onFailure { lastError = it }
+                    .getOrNull()
+                if (pfd != null) {
+                    try {
+                        ParcelFileDescriptor.AutoCloseOutputStream(pfd).use { out ->
+                            if (mode == "w") {
+                                runCatching { (out as? FileOutputStream)?.channel?.truncate(0L) }
+                            }
+                            out.write(bytes)
+                            out.flush()
+                            runCatching { (out as? FileOutputStream)?.fd?.sync() }
+                        }
+                        wrote = true
+                        break
+                    } catch (e: Throwable) {
+                        lastError = e
+                    }
+                }
+            }
+
+            if (!wrote) {
+                for (mode in listOf("wt", "w", "")) {
+                    val stream = runCatching {
+                        if (mode.isEmpty()) resolver.openOutputStream(uri) else resolver.openOutputStream(uri, mode)
+                    }.onFailure { lastError = it }.getOrNull()
+                    if (stream != null) {
+                        stream.use { out ->
+                            out.write(bytes)
+                            out.flush()
+                        }
+                        wrote = true
+                        break
+                    }
+                }
+            }
+
+            if (!wrote) {
+                throw (lastError ?: IllegalStateException(
+                    "Write permission for the Google Drive file was denied. Please link the file again."
+                ))
             }
             resolveSafDisplayName(context, uri)
         }
@@ -383,9 +471,10 @@ object GoogleDriveBackupClient {
         return runCatching {
             val uri = uriString.toUri()
             val resolver = context.applicationContext.contentResolver
-            val text = resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use {
+            val rawText = resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use {
                 it.readText()
             } ?: throw IllegalStateException("Could not read the Google Drive file.")
+            val text = rawText.removePrefix("\uFEFF")
             if (text.isBlank()) {
                 throw IllegalStateException("The selected Google Drive file is empty.")
             }

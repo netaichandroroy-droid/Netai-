@@ -66,6 +66,7 @@ import com.example.auth.AppLockCredentialStore
 import com.example.data.AppUpdateUiState
 import com.example.data.CloudAutoSyncRepository
 import com.example.data.CloudSyncPrefsStore
+import com.example.data.GoogleDriveBackupStore
 import com.example.data.LocalTransactionStore
 import com.example.data.MemberStore
 import com.example.data.MemberTakaJomaStore
@@ -120,6 +121,7 @@ fun MemberMainApp(
     val takaJomaStore = remember(context) { MemberTakaJomaStore(context) }
     val monthlySalesStore = remember(context) { MonthlySalesStore(context) }
     val cloudSyncPrefs = remember(context) { CloudSyncPrefsStore(context) }
+    val driveBackupStore = remember(context) { GoogleDriveBackupStore(context) }
     val viewModel: LocalHisabViewModel = viewModel(
         key = "member_hisab_${syncOwnerUid}_${initialMember.id}",
         factory = viewModelFactory {
@@ -132,6 +134,7 @@ fun MemberMainApp(
                     monthlySalesStore = monthlySalesStore,
                     ownerUserId = "member_${initialMember.id}",
                     reservedAdminLoginId = credentialStore.getLoginId(),
+                    driveBackupStore = driveBackupStore,
                     cloudSyncRepository = cloudSyncRepository,
                     cloudSyncPrefs = cloudSyncPrefs
                 )

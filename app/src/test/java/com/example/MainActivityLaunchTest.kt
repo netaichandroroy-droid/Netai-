@@ -2,6 +2,7 @@ package com.example
 
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -291,13 +292,17 @@ class MainActivityLaunchTest {
             composeRule.waitForIdle()
             composeRule.onNodeWithTag("firestore_net_balance_card").assertIsDisplayed()
             composeRule.onNodeWithTag("firestore_net_balance_amount").assertIsDisplayed()
-            composeRule.onNodeWithTag("firestore_total_deposits_value").assertIsDisplayed()
             composeRule.onNodeWithTag("firestore_total_sales_value").assertIsDisplayed()
+            composeRule.onNodeWithTag("firestore_total_deposits_value").assertIsDisplayed()
             composeRule.onNodeWithTag("firestore_net_balance_status").assertIsDisplayed()
             composeRule.onNodeWithTag("hero_balance_card").assertIsDisplayed()
-            composeRule.onNodeWithText("+৳ 1,000").assertIsDisplayed()
-            composeRule.onNodeWithText("৳ 3,500").assertIsDisplayed()
-            composeRule.onNodeWithText("৳ 2,500").assertIsDisplayed()
+            composeRule.onNodeWithTag("firestore_net_balance_amount").assertTextEquals("+৳ 1,000")
+            composeRule.onNodeWithTag("firestore_total_sales_value").assertTextEquals("৳ 2,500")
+            composeRule.onNodeWithTag("firestore_total_deposits_value").assertTextEquals("৳ 3,500")
+            composeRule.onNodeWithText("Total Sales (TP+VAT)").assertIsDisplayed()
+            composeRule.onNodeWithText("Sales & Dues")
+                .performScrollTo()
+                .assertIsDisplayed()
         }
     }
 
