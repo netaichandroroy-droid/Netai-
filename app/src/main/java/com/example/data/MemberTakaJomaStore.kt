@@ -10,13 +10,30 @@ import java.util.UUID
 
 class MemberTakaJomaStore(context: Context) {
 
-    private val prefs = context.applicationContext.getSharedPreferences(
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(
         PREFS_NAME,
         Context.MODE_PRIVATE
     )
 
     fun loadAll(): List<MemberTakaJoma> {
-        val raw = prefs.getString(KEY_SUBMISSIONS, null) ?: return emptyList()
+        val rawFromPrefs = if (prefs.contains(KEY_SUBMISSIONS)) prefs.getString(KEY_SUBMISSIONS, null) else null
+        val parsedFromPrefs = rawFromPrefs?.let { parseSubmissionsJson(it) }
+        if (parsedFromPrefs != null) {
+            return parsedFromPrefs
+        }
+        val rawFromVault = DurableLocalVault.getSection(appContext, VAULT_SECTION)
+        val parsedFromVault = rawFromVault?.let { parseSubmissionsJson(it) }
+        if (parsedFromVault != null) {
+            prefs.edit(commit = true) {
+                putString(KEY_SUBMISSIONS, rawFromVault)
+            }
+            return parsedFromVault
+        }
+        return emptyList()
+    }
+
+    private fun parseSubmissionsJson(raw: String): List<MemberTakaJoma>? {
         return runCatching {
             val array = JSONArray(raw)
             val list = ArrayList<MemberTakaJoma>(array.length())
@@ -50,7 +67,7 @@ class MemberTakaJomaStore(context: Context) {
                 )
             }
             sortSubmissions(list)
-        }.getOrDefault(emptyList())
+        }.getOrNull()
     }
 
     fun loadForMember(memberId: String): List<MemberTakaJoma> {
@@ -83,9 +100,11 @@ class MemberTakaJomaStore(context: Context) {
             }
             array.put(obj)
         }
+        val json = array.toString()
         prefs.edit(commit = true) {
-            putString(KEY_SUBMISSIONS, array.toString())
+            putString(KEY_SUBMISSIONS, json)
         }
+        DurableLocalVault.putSection(appContext, VAULT_SECTION, json)
     }
 
     fun isDuplicateSlip(slipHash: String, photoPath: String = ""): Boolean {
@@ -177,5 +196,6 @@ class MemberTakaJomaStore(context: Context) {
     companion object {
         private const val PREFS_NAME = "hisab_member_taka_joma_prefs"
         private const val KEY_SUBMISSIONS = "submissions_json"
+        private const val VAULT_SECTION = "taka_joma_json"
     }
 }

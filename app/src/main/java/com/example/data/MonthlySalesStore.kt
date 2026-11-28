@@ -9,13 +9,30 @@ import java.util.UUID
 
 class MonthlySalesStore(context: Context) {
 
-    private val prefs = context.applicationContext.getSharedPreferences(
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(
         PREFS_NAME,
         Context.MODE_PRIVATE
     )
 
     fun loadAll(): List<MonthlySalesRecord> {
-        val raw = prefs.getString(KEY_SALES_RECORDS, null) ?: return emptyList()
+        val rawFromPrefs = if (prefs.contains(KEY_SALES_RECORDS)) prefs.getString(KEY_SALES_RECORDS, null) else null
+        val parsedFromPrefs = rawFromPrefs?.let { parseSalesJson(it) }
+        if (parsedFromPrefs != null) {
+            return parsedFromPrefs
+        }
+        val rawFromVault = DurableLocalVault.getSection(appContext, VAULT_SECTION)
+        val parsedFromVault = rawFromVault?.let { parseSalesJson(it) }
+        if (parsedFromVault != null) {
+            prefs.edit(commit = true) {
+                putString(KEY_SALES_RECORDS, rawFromVault)
+            }
+            return parsedFromVault
+        }
+        return emptyList()
+    }
+
+    private fun parseSalesJson(raw: String): List<MonthlySalesRecord>? {
         return runCatching {
             val array = JSONArray(raw)
             val list = ArrayList<MonthlySalesRecord>(array.length())
@@ -39,7 +56,7 @@ class MonthlySalesStore(context: Context) {
                 )
             }
             sortRecords(list)
-        }.getOrDefault(emptyList())
+        }.getOrNull()
     }
 
     fun loadForMonth(yearMonth: String): List<MonthlySalesRecord> {
@@ -61,9 +78,11 @@ class MonthlySalesStore(context: Context) {
             }
             array.put(obj)
         }
+        val json = array.toString()
         prefs.edit(commit = true) {
-            putString(KEY_SALES_RECORDS, array.toString())
+            putString(KEY_SALES_RECORDS, json)
         }
+        DurableLocalVault.putSection(appContext, VAULT_SECTION, json)
     }
 
     fun uploadForMonth(
@@ -133,5 +152,6 @@ class MonthlySalesStore(context: Context) {
     companion object {
         private const val PREFS_NAME = "hisab_monthly_sales_prefs"
         private const val KEY_SALES_RECORDS = "sales_records_json"
+        private const val VAULT_SECTION = "monthly_sales_json"
     }
 }

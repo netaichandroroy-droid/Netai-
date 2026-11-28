@@ -2,6 +2,7 @@ package com.example.data
 
 import android.content.Context
 import androidx.core.content.edit
+import org.json.JSONObject
 
 data class GoogleDriveBackupStatus(
     val isConnected: Boolean = false,
@@ -19,12 +20,71 @@ data class GoogleDriveBackupStatus(
 
 class GoogleDriveBackupStore(context: Context) {
 
-    private val prefs = context.applicationContext.getSharedPreferences(
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(
         PREFS_NAME,
         Context.MODE_PRIVATE
     )
 
+    private fun ensureHydratedFromVault() {
+        val hasPrefsState = prefs.contains(KEY_CONNECTED) ||
+            prefs.contains(KEY_OAUTH_CONNECTED) ||
+            prefs.contains(KEY_SAF_URI)
+        if (hasPrefsState) return
+
+        val raw = DurableLocalVault.getSection(appContext, VAULT_SECTION) ?: return
+        runCatching {
+            val obj = JSONObject(raw)
+            prefs.edit(commit = true) {
+                putBoolean(KEY_CONNECTED, obj.optBoolean(KEY_CONNECTED, false))
+                putBoolean(KEY_OAUTH_CONNECTED, obj.optBoolean(KEY_OAUTH_CONNECTED, false))
+                val email = obj.optString(KEY_EMAIL, "")
+                if (email.isNotEmpty()) putString(KEY_EMAIL, email)
+                val fileId = obj.optString(KEY_FILE_ID, "")
+                if (fileId.isNotEmpty()) putString(KEY_FILE_ID, fileId)
+                val safUri = obj.optString(KEY_SAF_URI, "")
+                if (safUri.isNotEmpty()) putString(KEY_SAF_URI, safUri)
+                val safName = obj.optString(KEY_SAF_NAME, "")
+                if (safName.isNotEmpty()) putString(KEY_SAF_NAME, safName)
+                val lastMs = obj.optLong(KEY_LAST_BACKUP_MS, 0L)
+                if (lastMs > 0L) putLong(KEY_LAST_BACKUP_MS, lastMs)
+                val summary = obj.optString(KEY_LAST_SUMMARY, "")
+                if (summary.isNotEmpty()) putString(KEY_LAST_SUMMARY, summary)
+                putBoolean(KEY_AUTO_BACKUP, obj.optBoolean(KEY_AUTO_BACKUP, true))
+                val skipped = obj.optString(KEY_AUTO_LINK_SKIPPED_EMAIL, "")
+                if (skipped.isNotEmpty()) putString(KEY_AUTO_LINK_SKIPPED_EMAIL, skipped)
+                putBoolean(KEY_BACKUP_PENDING, obj.optBoolean(KEY_BACKUP_PENDING, false))
+                val sig = obj.optString(KEY_LAST_BACKED_UP_SIGNATURE, "")
+                if (sig.isNotEmpty()) putString(KEY_LAST_BACKED_UP_SIGNATURE, sig)
+            }
+        }
+    }
+
+    private fun mirrorStatusToVault() {
+        val status = readStatusFromPrefs()
+        val obj = JSONObject().apply {
+            put(KEY_CONNECTED, status.isConnected)
+            put(KEY_OAUTH_CONNECTED, status.oauthConnected)
+            put(KEY_EMAIL, status.connectedEmail)
+            put(KEY_FILE_ID, status.driveFileId)
+            put(KEY_SAF_URI, status.safDocumentUri)
+            put(KEY_SAF_NAME, status.safDisplayName)
+            put(KEY_LAST_BACKUP_MS, status.lastBackupAtMs)
+            put(KEY_LAST_SUMMARY, status.lastBackupSummary)
+            put(KEY_AUTO_BACKUP, status.autoBackupEnabled)
+            put(KEY_AUTO_LINK_SKIPPED_EMAIL, prefs.getString(KEY_AUTO_LINK_SKIPPED_EMAIL, "").orEmpty())
+            put(KEY_BACKUP_PENDING, status.backupPending)
+            put(KEY_LAST_BACKED_UP_SIGNATURE, status.lastBackedUpSignature)
+        }
+        DurableLocalVault.putSection(appContext, VAULT_SECTION, obj.toString())
+    }
+
     fun loadStatus(): GoogleDriveBackupStatus {
+        ensureHydratedFromVault()
+        return readStatusFromPrefs()
+    }
+
+    private fun readStatusFromPrefs(): GoogleDriveBackupStatus {
         val legacyConnected = prefs.getBoolean(KEY_CONNECTED, false)
         val safUri = prefs.getString(KEY_SAF_URI, "")?.trim().orEmpty()
         val safName = prefs.getString(KEY_SAF_NAME, "")?.trim().orEmpty()
@@ -50,6 +110,7 @@ class GoogleDriveBackupStore(context: Context) {
     }
 
     fun saveConnectedAccount(email: String) {
+        ensureHydratedFromVault()
         prefs.edit(commit = true) {
             putBoolean(KEY_CONNECTED, true)
             putBoolean(KEY_OAUTH_CONNECTED, true)
@@ -58,6 +119,7 @@ class GoogleDriveBackupStore(context: Context) {
                 putString(KEY_EMAIL, email.trim())
             }
         }
+        mirrorStatusToVault()
     }
 
     fun updateBackupMetadata(
@@ -68,6 +130,7 @@ class GoogleDriveBackupStore(context: Context) {
         backedUpSignature: String = "",
         clearPending: Boolean = true
     ) {
+        ensureHydratedFromVault()
         prefs.edit(commit = true) {
             putBoolean(KEY_CONNECTED, true)
             putBoolean(KEY_OAUTH_CONNECTED, true)
@@ -91,6 +154,7 @@ class GoogleDriveBackupStore(context: Context) {
                 putString(KEY_LAST_BACKED_UP_SIGNATURE, backedUpSignature.trim())
             }
         }
+        mirrorStatusToVault()
     }
 
     fun saveSafDocument(
@@ -100,6 +164,7 @@ class GoogleDriveBackupStore(context: Context) {
     ) {
         val cleanUri = uriString.trim()
         if (cleanUri.isEmpty()) return
+        ensureHydratedFromVault()
         prefs.edit(commit = true) {
             putBoolean(KEY_CONNECTED, true)
             putString(KEY_SAF_URI, cleanUri)
@@ -109,6 +174,7 @@ class GoogleDriveBackupStore(context: Context) {
                 putString(KEY_EMAIL, email.trim())
             }
         }
+        mirrorStatusToVault()
     }
 
     fun updateSafBackupMetadata(
@@ -122,6 +188,7 @@ class GoogleDriveBackupStore(context: Context) {
     ) {
         val cleanUri = uriString.trim()
         if (cleanUri.isEmpty()) return
+        ensureHydratedFromVault()
         prefs.edit(commit = true) {
             putBoolean(KEY_CONNECTED, true)
             putString(KEY_SAF_URI, cleanUri)
@@ -145,6 +212,7 @@ class GoogleDriveBackupStore(context: Context) {
                 putString(KEY_LAST_BACKED_UP_SIGNATURE, backedUpSignature.trim())
             }
         }
+        mirrorStatusToVault()
     }
 
     fun clearSafDocument() {
@@ -154,62 +222,78 @@ class GoogleDriveBackupStore(context: Context) {
             remove(KEY_SAF_NAME)
             putBoolean(KEY_CONNECTED, status.oauthConnected)
         }
+        mirrorStatusToVault()
     }
 
     fun setAutoBackupEnabled(enabled: Boolean) {
+        ensureHydratedFromVault()
         prefs.edit(commit = true) {
             putBoolean(KEY_AUTO_BACKUP, enabled)
         }
+        mirrorStatusToVault()
     }
 
     fun markBackupPending() {
+        ensureHydratedFromVault()
         prefs.edit(commit = true) {
             putBoolean(KEY_BACKUP_PENDING, true)
         }
+        mirrorStatusToVault()
     }
 
     fun isBackupPending(): Boolean {
+        ensureHydratedFromVault()
         return prefs.getBoolean(KEY_BACKUP_PENDING, false)
     }
 
     fun clearBackupPending(signature: String = "") {
+        ensureHydratedFromVault()
         prefs.edit(commit = true) {
             putBoolean(KEY_BACKUP_PENDING, false)
             if (signature.isNotBlank()) {
                 putString(KEY_LAST_BACKED_UP_SIGNATURE, signature.trim())
             }
         }
+        mirrorStatusToVault()
     }
 
     fun getLastBackedUpSignature(): String {
+        ensureHydratedFromVault()
         return prefs.getString(KEY_LAST_BACKED_UP_SIGNATURE, "")?.trim().orEmpty()
     }
 
     fun setLastBackedUpSignature(signature: String) {
+        ensureHydratedFromVault()
         prefs.edit(commit = true) {
             putString(KEY_LAST_BACKED_UP_SIGNATURE, signature.trim())
         }
+        mirrorStatusToVault()
     }
 
     fun markAutoLinkSkipped(email: String) {
         val cleanEmail = email.trim()
         if (cleanEmail.isEmpty()) return
+        ensureHydratedFromVault()
         prefs.edit(commit = true) {
             putString(KEY_AUTO_LINK_SKIPPED_EMAIL, cleanEmail)
         }
+        mirrorStatusToVault()
     }
 
     fun wasAutoLinkSkippedFor(email: String): Boolean {
         val cleanEmail = email.trim()
         if (cleanEmail.isEmpty()) return false
+        ensureHydratedFromVault()
         val skipped = prefs.getString(KEY_AUTO_LINK_SKIPPED_EMAIL, "")?.trim().orEmpty()
         return skipped.equals(cleanEmail, ignoreCase = true)
     }
 
     fun clearAutoLinkSkipped() {
+        ensureHydratedFromVault()
         prefs.edit(commit = true) {
             remove(KEY_AUTO_LINK_SKIPPED_EMAIL)
         }
+        mirrorStatusToVault()
     }
 
     fun disconnect() {
@@ -225,6 +309,7 @@ class GoogleDriveBackupStore(context: Context) {
             remove(KEY_BACKUP_PENDING)
             remove(KEY_LAST_BACKED_UP_SIGNATURE)
         }
+        mirrorStatusToVault()
     }
 
     fun applySyncedDriveConfig(
@@ -235,6 +320,7 @@ class GoogleDriveBackupStore(context: Context) {
         lastBackupAtMs: Long,
         lastBackupSummary: String
     ) {
+        ensureHydratedFromVault()
         val cleanEmail = connectedEmail.trim()
         val cleanFileId = driveFileId.trim()
         val cleanSummary = lastBackupSummary.trim()
@@ -248,6 +334,7 @@ class GoogleDriveBackupStore(context: Context) {
                     putBoolean(KEY_AUTO_BACKUP, autoBackupEnabled)
                     remove(KEY_FILE_ID)
                 }
+                mirrorStatusToVault()
                 return
             }
             prefs.edit(commit = true) {
@@ -261,6 +348,7 @@ class GoogleDriveBackupStore(context: Context) {
                 remove(KEY_BACKUP_PENDING)
                 remove(KEY_LAST_BACKED_UP_SIGNATURE)
             }
+            mirrorStatusToVault()
             return
         }
         val existingLastMs = prefs.getLong(KEY_LAST_BACKUP_MS, 0L)
@@ -289,10 +377,12 @@ class GoogleDriveBackupStore(context: Context) {
                 }
             }
         }
+        mirrorStatusToVault()
     }
 
     companion object {
         private const val PREFS_NAME = "hisab_google_drive_prefs"
+        private const val VAULT_SECTION = "google_drive_status_json"
         private const val KEY_CONNECTED = "drive_connected"
         private const val KEY_OAUTH_CONNECTED = "drive_oauth_connected"
         private const val KEY_EMAIL = "drive_email"

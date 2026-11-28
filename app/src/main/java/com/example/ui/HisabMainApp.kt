@@ -853,7 +853,11 @@ fun HisabMainApp(
     }
 
     LaunchedEffect(Unit) {
+        viewModel.attachContext(context)
         viewModel.refreshSharedData()
+        if (driveState.safDocumentUri.isNotBlank() && viewModel.isLocalDataEmpty()) {
+            viewModel.restoreFromSafIfLocalEmpty(context)
+        }
     }
 
     LaunchedEffect(cloudSyncState.lastSyncedAtMs) {
@@ -879,16 +883,9 @@ fun HisabMainApp(
                     viewModel.refreshSharedData()
                 }
                 Lifecycle.Event.ON_PAUSE -> {
+                    viewModel.flushPendingDriveBackup(context)
                     val state = latestDriveState
                     if (state.isConnected && state.autoBackupEnabled && viewModel.hasPendingDriveBackup()) {
-                        if (state.safDocumentUri.isNotBlank()) {
-                            viewModel.backupAllToSafUri(
-                                context = context,
-                                uriString = state.safDocumentUri,
-                                silent = true,
-                                emailHint = latestSignedInCloudEmail
-                            )
-                        }
                         if (state.oauthConnected) {
                             latestRequestDriveAuthAndRun(DrivePendingAction.BACKUP_SILENT)
                         }
@@ -971,7 +968,6 @@ fun HisabMainApp(
 
     LaunchedEffect(autoBackupRevision) {
         if (autoBackupRevision > 0 && driveState.isConnected && driveState.autoBackupEnabled) {
-            delay(450)
             if (driveState.safDocumentUri.isNotBlank()) {
                 viewModel.backupAllToSafUri(
                     context = context,
@@ -981,6 +977,7 @@ fun HisabMainApp(
                 )
             }
             if (driveState.oauthConnected) {
+                delay(300)
                 requestDriveAuthAndRun(DrivePendingAction.BACKUP_SILENT)
             }
         }
@@ -1247,7 +1244,10 @@ fun HisabMainApp(
                                 onOpenAiCallCenter = { viewModel.openSettingsSubPage(SettingsSubPage.AI_CALL_CENTER) },
                                 onOpenMemberAppLink = { showMemberAppLinkDialog = true },
                                 onOpenChangePassword = { showChangePasswordDialog = true },
-                                onAppLogout = onAppLogout,
+                                onAppLogout = {
+                                    viewModel.flushPendingDriveBackup(context)
+                                    onAppLogout()
+                                },
                                 onExportJson = { jsonExportLauncher.launch("rafiqul-hisab-full-backup.json") },
                                 onRestoreJson = { jsonRestoreLauncher.launch(arrayOf("application/json", "*/*")) },
                                 onExportPicture = {

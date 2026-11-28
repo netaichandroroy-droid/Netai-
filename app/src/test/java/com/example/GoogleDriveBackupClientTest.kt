@@ -448,6 +448,159 @@ class GoogleDriveBackupClientTest {
             Dispatchers.resetMain()
         }
     }
+
+    @Test
+    fun `writeJsonToSafUri verifies written payload and restoreFromSafIfLocalEmpty restores entries`() {
+        val dispatcher = StandardTestDispatcher()
+        Dispatchers.setMain(dispatcher)
+        try {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val txStore = LocalTransactionStore(context)
+            val memberStore = MemberStore(context)
+            val takaJomaStore = MemberTakaJomaStore(context)
+            val salesStore = MonthlySalesStore(context)
+            val paymentStore = OnlinePaymentStore(context)
+            val driveStore = GoogleDriveBackupStore(context)
+
+            val member = Member(
+                id = "m_saf_1",
+                name = "Kamal",
+                designation = "MPO",
+                phone = "01711111111",
+                depot = "Rangpur",
+                code = "K101",
+                isActive = true
+            )
+            val fullJson = BackupExporter.buildFullAppBackupJson(
+                transactions = emptyList(),
+                members = listOf(member),
+                memberTakaJoma = listOf(
+                    MemberTakaJoma(
+                        id = "tj_saf_1",
+                        memberId = "m_saf_1",
+                        name = "Kamal",
+                        code = "K101",
+                        depot = "Rangpur",
+                        amount = 1500.0,
+                        date = "2026-11-28"
+                    )
+                ),
+                monthlySales = emptyList(),
+                onlinePaymentConfig = paymentStore.load()
+            )
+
+            val safFile = java.io.File(context.cacheDir, "test-drive-backup.json")
+            if (safFile.exists()) safFile.delete()
+            val safUri = android.net.Uri.fromFile(safFile).toString()
+
+            val writeRes = GoogleDriveBackupClient.writeJsonToSafUri(context, safUri, fullJson)
+            assertTrue(writeRes.isSuccess)
+            val readRes = GoogleDriveBackupClient.readJsonFromSafUri(context, safUri)
+            assertTrue(readRes.isSuccess)
+            val parsed = BackupExporter.parseFullAppBackupJson(readRes.getOrThrow().second).getOrThrow()
+            assertEquals(1, parsed.members.size)
+            assertEquals(1, parsed.memberTakaJoma.size)
+
+            // Simulate fresh app state with linked SAF URI and empty local stores -> startup auto-restore
+            driveStore.saveSafDocument(uriString = safUri, displayName = "test-drive-backup.json")
+            val adminVm = LocalHisabViewModel(
+                localStore = txStore,
+                memberStore = memberStore,
+                onlinePaymentStore = paymentStore,
+                takaJomaStore = takaJomaStore,
+                monthlySalesStore = salesStore,
+                driveBackupStore = driveStore
+            )
+            assertTrue(adminVm.isLocalDataEmpty())
+
+            adminVm.restoreFromSafIfLocalEmpty(context)
+            val deadline = System.currentTimeMillis() + 5_000L
+            while (System.currentTimeMillis() < deadline) {
+                dispatcher.scheduler.advanceUntilIdle()
+                if (!adminVm.driveState.value.isSyncing && !adminVm.isLocalDataEmpty()) {
+                    break
+                }
+                Thread.sleep(15)
+            }
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertFalse(adminVm.isLocalDataEmpty())
+            assertEquals(1, memberStore.loadAll().size)
+            assertEquals("Kamal", memberStore.loadAll().first().name)
+            assertEquals(1, takaJomaStore.loadAll().size)
+            assertFalse(driveStore.isBackupPending())
+
+            // Verify missing/broken SAF URI fails cleanly rather than faking success
+            val missingUri = android.net.Uri.fromFile(
+                java.io.File(context.cacheDir, "nonexistent_dir/missing.json")
+            ).toString()
+            val failedWrite = GoogleDriveBackupClient.writeJsonToSafUri(context, missingUri, fullJson)
+            assertTrue(failedWrite.isFailure)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `restoreFromJson marks pending backup when local has extra takaJoma or sales records`() {
+        val dispatcher = StandardTestDispatcher()
+        Dispatchers.setMain(dispatcher)
+        try {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val txStore = LocalTransactionStore(context)
+            val memberStore = MemberStore(context)
+            val takaJomaStore = MemberTakaJomaStore(context)
+            val salesStore = MonthlySalesStore(context)
+            val paymentStore = OnlinePaymentStore(context)
+            val driveStore = GoogleDriveBackupStore(context)
+
+            driveStore.saveConnectedAccount("admin@gmail.com")
+            takaJomaStore.saveAll(
+                listOf(
+                    MemberTakaJoma(
+                        id = "tj_local_extra",
+                        memberId = "m_1",
+                        name = "Rafiq",
+                        code = "R1",
+                        depot = "Rangpur",
+                        amount = 500.0,
+                        date = "2026-11-28"
+                    )
+                )
+            )
+            val adminVm = LocalHisabViewModel(
+                localStore = txStore,
+                memberStore = memberStore,
+                onlinePaymentStore = paymentStore,
+                takaJomaStore = takaJomaStore,
+                monthlySalesStore = salesStore,
+                driveBackupStore = driveStore
+            )
+            val incomingJson = BackupExporter.buildFullAppBackupJson(
+                transactions = emptyList(),
+                members = listOf(
+                    Member(
+                        id = "m_1",
+                        name = "Rafiq",
+                        designation = "MPO",
+                        phone = "01711111111",
+                        depot = "Rangpur",
+                        code = "R1",
+                        isActive = true
+                    )
+                ),
+                memberTakaJoma = emptyList(),
+                monthlySales = emptyList(),
+                onlinePaymentConfig = paymentStore.load()
+            )
+            val ok = adminVm.restoreFromJson(incomingJson, triggerAutoBackup = false)
+            assertTrue(ok)
+            assertEquals(1, takaJomaStore.loadAll().size)
+            assertTrue(driveStore.isBackupPending())
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
 }
 
 

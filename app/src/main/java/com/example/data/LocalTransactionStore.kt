@@ -13,13 +13,30 @@ import java.util.UUID
 
 class LocalTransactionStore(context: Context) {
 
-    private val prefs = context.applicationContext.getSharedPreferences(
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(
         PREFS_NAME,
         Context.MODE_PRIVATE
     )
 
     fun loadAll(): List<HisabTransaction> {
-        val raw = prefs.getString(KEY_TRANSACTIONS, null) ?: return emptyList()
+        val rawFromPrefs = if (prefs.contains(KEY_TRANSACTIONS)) prefs.getString(KEY_TRANSACTIONS, null) else null
+        val parsedFromPrefs = rawFromPrefs?.let { parseTransactionsJson(it) }
+        if (parsedFromPrefs != null) {
+            return parsedFromPrefs
+        }
+        val rawFromVault = DurableLocalVault.getSection(appContext, VAULT_SECTION)
+        val parsedFromVault = rawFromVault?.let { parseTransactionsJson(it) }
+        if (parsedFromVault != null) {
+            prefs.edit(commit = true) {
+                putString(KEY_TRANSACTIONS, rawFromVault)
+            }
+            return parsedFromVault
+        }
+        return emptyList()
+    }
+
+    private fun parseTransactionsJson(raw: String): List<HisabTransaction>? {
         return runCatching {
             val array = JSONArray(raw)
             val list = ArrayList<HisabTransaction>(array.length())
@@ -52,7 +69,7 @@ class LocalTransactionStore(context: Context) {
                 compareByDescending<HisabTransaction> { it.date }
                     .thenByDescending { it.createdAt?.seconds ?: 0L }
             )
-        }.getOrDefault(emptyList())
+        }.getOrNull()
     }
 
     fun saveAll(items: List<HisabTransaction>) {
@@ -70,15 +87,18 @@ class LocalTransactionStore(context: Context) {
             }
             array.put(obj)
         }
+        val json = array.toString()
         prefs.edit(commit = true) {
-            putString(KEY_TRANSACTIONS, array.toString())
+            putString(KEY_TRANSACTIONS, json)
         }
+        DurableLocalVault.putSection(appContext, VAULT_SECTION, json)
     }
 
     fun clearAll() {
         prefs.edit(commit = true) {
             remove(KEY_TRANSACTIONS)
         }
+        DurableLocalVault.removeSection(appContext, VAULT_SECTION)
     }
 
     fun toImportedList(): List<ImportedTransaction> {
@@ -97,6 +117,7 @@ class LocalTransactionStore(context: Context) {
     companion object {
         private const val PREFS_NAME = "hisab_local_transactions_prefs"
         private const val KEY_TRANSACTIONS = "transactions_json"
+        private const val VAULT_SECTION = "transactions_json"
         const val LOCAL_USER_ID = "local_rafiqul"
     }
 }

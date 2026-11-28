@@ -411,57 +411,178 @@ object GoogleDriveBackupClient {
     ): Result<String> {
         return runCatching {
             val uri = uriString.toUri()
-            val resolver = context.applicationContext.contentResolver
+            val appContext = context.applicationContext
+            val resolver = appContext.contentResolver
             val bytes = jsonPayload.toByteArray(Charsets.UTF_8)
             var lastError: Throwable? = null
-            var wrote = false
+            var verifiedWrite = false
 
-            // Prefer ParcelFileDescriptor with explicit truncate/sync for Google Drive & cloud providers
-            for (mode in listOf("wt", "rwt", "w")) {
+            val expectedBackup = BackupExporter.parseFullAppBackupJson(jsonPayload).getOrNull()
+
+            // Try truncating ParcelFileDescriptor and OutputStream modes first, then fallback "w" modes,
+            // and verify the target actually contains valid non-empty JSON after closing.
+            for (mode in listOf("wt", "rwt")) {
                 val pfd = runCatching { resolver.openFileDescriptor(uri, mode) }
                     .onFailure { lastError = it }
                     .getOrNull()
                 if (pfd != null) {
-                    try {
+                    val ok = try {
                         ParcelFileDescriptor.AutoCloseOutputStream(pfd).use { out ->
-                            if (mode == "w") {
-                                runCatching { (out as? FileOutputStream)?.channel?.truncate(0L) }
-                            }
                             out.write(bytes)
                             out.flush()
                             runCatching { (out as? FileOutputStream)?.fd?.sync() }
                         }
-                        wrote = true
-                        break
+                        verifySafWrittenContent(resolver, uri, jsonPayload, expectedBackup)
                     } catch (e: Throwable) {
                         lastError = e
+                        false
+                    }
+                    if (ok) {
+                        verifiedWrite = true
+                        break
                     }
                 }
             }
 
-            if (!wrote) {
-                for (mode in listOf("wt", "w", "")) {
+            if (!verifiedWrite) {
+                for (mode in listOf("wt", "rwt")) {
+                    val stream = runCatching { resolver.openOutputStream(uri, mode) }
+                        .onFailure { lastError = it }
+                        .getOrNull()
+                    if (stream != null) {
+                        val ok = try {
+                            stream.use { out ->
+                                out.write(bytes)
+                                out.flush()
+                                runCatching { (out as? FileOutputStream)?.fd?.sync() }
+                            }
+                            verifySafWrittenContent(resolver, uri, jsonPayload, expectedBackup)
+                        } catch (e: Throwable) {
+                            lastError = e
+                            false
+                        }
+                        if (ok) {
+                            verifiedWrite = true
+                            break
+                        }
+                    }
+                }
+            }
+
+            if (!verifiedWrite) {
+                val pfd = runCatching { resolver.openFileDescriptor(uri, "w") }
+                    .onFailure { lastError = it }
+                    .getOrNull()
+                if (pfd != null) {
+                    val ok = try {
+                        ParcelFileDescriptor.AutoCloseOutputStream(pfd).use { out ->
+                            runCatching { (out as? FileOutputStream)?.channel?.truncate(0L) }
+                            out.write(bytes)
+                            out.flush()
+                            runCatching { (out as? FileOutputStream)?.fd?.sync() }
+                        }
+                        verifySafWrittenContent(resolver, uri, jsonPayload, expectedBackup)
+                    } catch (e: Throwable) {
+                        lastError = e
+                        false
+                    }
+                    if (ok) {
+                        verifiedWrite = true
+                    }
+                }
+            }
+
+            if (!verifiedWrite) {
+                for (mode in listOf("w", "")) {
                     val stream = runCatching {
                         if (mode.isEmpty()) resolver.openOutputStream(uri) else resolver.openOutputStream(uri, mode)
                     }.onFailure { lastError = it }.getOrNull()
                     if (stream != null) {
-                        stream.use { out ->
-                            out.write(bytes)
-                            out.flush()
+                        val ok = try {
+                            stream.use { out ->
+                                runCatching { (out as? FileOutputStream)?.channel?.truncate(0L) }
+                                out.write(bytes)
+                                out.flush()
+                                runCatching { (out as? FileOutputStream)?.fd?.sync() }
+                            }
+                            verifySafWrittenContent(resolver, uri, jsonPayload, expectedBackup)
+                        } catch (e: Throwable) {
+                            lastError = e
+                            false
                         }
-                        wrote = true
-                        break
+                        if (ok) {
+                            verifiedWrite = true
+                            break
+                        }
                     }
                 }
             }
 
-            if (!wrote) {
+            if (!verifiedWrite) {
                 throw (lastError ?: IllegalStateException(
-                    "Write permission for the Google Drive file was denied. Please link the file again."
+                    "Could not verify write to Google Drive file. Please relink the file."
                 ))
             }
-            resolveSafDisplayName(context, uri)
+            resolveSafDisplayName(appContext, uri)
         }
+    }
+
+    private fun verifySafWrittenContent(
+        resolver: android.content.ContentResolver,
+        uri: Uri,
+        expectedPayload: String,
+        expectedBackup: FullAppBackupData?
+    ): Boolean {
+        val streamResult = runCatching { resolver.openInputStream(uri) }
+        val inputStream = streamResult.getOrElse { err ->
+            // Write-only URIs that explicitly forbid reads shouldn't falsely fail if size > 0 or unknown
+            if (err is SecurityException || err is UnsupportedOperationException) {
+                return checkReportedSafSizeNonZero(resolver, uri, expectedPayload.isNotEmpty())
+            }
+            throw err
+        } ?: return checkReportedSafSizeNonZero(resolver, uri, expectedPayload.isNotEmpty())
+
+        val readBack = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            .removePrefix("\uFEFF")
+        if (readBack.isBlank()) {
+            throw IllegalStateException("Google Drive file remained empty after saving.")
+        }
+        if (expectedBackup != null) {
+            val parsed = BackupExporter.parseFullAppBackupJson(readBack).getOrElse {
+                throw IllegalStateException("Google Drive file saved corrupted JSON. Please retry backup.")
+            }
+            val matches = parsed.transactions.size == expectedBackup.transactions.size &&
+                parsed.members.size == expectedBackup.members.size &&
+                parsed.memberTakaJoma.size == expectedBackup.memberTakaJoma.size &&
+                parsed.monthlySales.size == expectedBackup.monthlySales.size
+            if (!matches) {
+                throw IllegalStateException("Google Drive file did not persist all latest entries.")
+            }
+            return true
+        }
+        return readBack.trim().isNotEmpty()
+    }
+
+    private fun checkReportedSafSizeNonZero(
+        resolver: android.content.ContentResolver,
+        uri: Uri,
+        requireNonZero: Boolean
+    ): Boolean {
+        if (!requireNonZero) return true
+        val reportedSize = runCatching {
+            resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (idx >= 0 && !cursor.isNull(idx)) cursor.getLong(idx) else null
+                } else {
+                    null
+                }
+            }
+        }.getOrNull()
+        if (reportedSize != null && reportedSize <= 0L) {
+            throw IllegalStateException("Google Drive file size stayed 0 bytes after saving.")
+        }
+        return true
     }
 
     fun readJsonFromSafUri(

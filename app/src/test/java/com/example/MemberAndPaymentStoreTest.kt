@@ -5,15 +5,20 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.auth.PasswordHasher
 import com.example.data.AppAutoUpdateController
 import com.example.data.AppUpdatePrefsStore
+import com.example.data.LocalTransactionStore
 import com.example.data.MemberAppLinkStore
 import com.example.data.MemberLoginResult
 import com.example.data.MemberStore
 import com.example.data.MemberTakaJomaStore
+import com.example.data.MonthlySalesStore
 import com.example.data.OnlinePaymentStore
+import com.example.model.AccountType
 import com.example.model.BangladeshBankDirectory
+import com.example.model.HisabTransaction
 import com.example.model.Member
 import com.example.model.MemberTakaJoma
 import com.example.model.PaymentChannel
+import com.example.model.TxType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -750,6 +755,134 @@ class MemberAndPaymentStoreTest {
         assertEquals(com.example.data.AiCallStatus.PENDING, queue[0].callStatus)
         assertEquals("m_low", queue[1].memberId)
         assertEquals(com.example.data.AiCallStatus.NO_PHONE, queue[1].callStatus)
+    }
+
+    @Test
+    fun durableLocalVault_recoversAllDataAndDriveStatusWhenSharedPreferencesCleared_andRespectsExplicitDeletes() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val memberStore = MemberStore(context)
+        val txStore = LocalTransactionStore(context)
+        val takaJomaStore = MemberTakaJomaStore(context)
+        val salesStore = MonthlySalesStore(context)
+        val paymentStore = OnlinePaymentStore(context)
+        val linkStore = com.example.data.MemberAppLinkStore(context)
+        val driveStore = com.example.data.GoogleDriveBackupStore(context)
+
+        val member = Member(
+            id = "m_vault_1",
+            name = "Rafiq",
+            designation = "MPO",
+            phone = "01711112222",
+            depot = "Rangpur",
+            code = "R-01",
+            isActive = true
+        )
+        memberStore.saveAll(listOf(member))
+        txStore.saveAll(
+            listOf(
+                HisabTransaction(
+                    id = "tx_vault_1",
+                    type = TxType.INCOME.wireValue,
+                    amount = 3200.0,
+                    category = "Deposit",
+                    note = "Vault tx",
+                    date = "2026-11-28",
+                    account = AccountType.CASH.wireValue
+                )
+            )
+        )
+        takaJomaStore.saveAll(
+            listOf(
+                MemberTakaJoma(
+                    id = "tj_vault_1",
+                    memberId = "m_vault_1",
+                    name = "Rafiq",
+                    code = "R-01",
+                    depot = "Rangpur",
+                    amount = 3200.0,
+                    date = "2026-11-28"
+                )
+            )
+        )
+        salesStore.saveAll(
+            listOf(
+                com.example.model.MonthlySalesRecord(
+                    id = "ms_vault_1",
+                    yearMonth = "2026-11",
+                    code = "R-01",
+                    name = "Rafiq",
+                    tpSales = 9000.0,
+                    tpPlusVat = 10350.0
+                )
+            )
+        )
+        val customConfig = paymentStore.load().copy(isOnlinePaymentEnabled = false)
+        paymentStore.save(customConfig)
+        linkStore.saveDownloadUrl("https://example.com/member-app.apk")
+        driveStore.saveSafDocument(
+            uriString = "content://com.android.externalstorage.documents/document/backup.json",
+            displayName = "rafiqul-hisab-full-backup.json",
+            email = "admin@gmail.com"
+        )
+        driveStore.updateSafBackupMetadata(
+            uriString = "content://com.android.externalstorage.documents/document/backup.json",
+            displayName = "rafiqul-hisab-full-backup.json",
+            timestampMs = 1_700_000_123_000L,
+            summary = "1 transactions • 1 members",
+            backedUpSignature = "sig_v1"
+        )
+
+        // Wipe all SharedPreferences XMLs directly to simulate SP loss/truncation
+        listOf(
+            "hisab_members_prefs",
+            "hisab_local_transactions_prefs",
+            "hisab_member_taka_joma_prefs",
+            "hisab_monthly_sales_prefs",
+            "hisab_online_payment_prefs",
+            "hisab_member_app_link_prefs",
+            "hisab_google_drive_prefs"
+        ).forEach { prefsName ->
+            context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .commit()
+        }
+
+        // Fresh store instances must transparently recover every record from DurableLocalVault
+        val recoveredMembers = MemberStore(context).loadAll()
+        assertEquals(1, recoveredMembers.size)
+        assertEquals("m_vault_1", recoveredMembers.first().id)
+
+        val recoveredTx = LocalTransactionStore(context).loadAll()
+        assertEquals(1, recoveredTx.size)
+        assertEquals("tx_vault_1", recoveredTx.first().id)
+
+        val recoveredTaka = MemberTakaJomaStore(context).loadAll()
+        assertEquals(1, recoveredTaka.size)
+        assertEquals("tj_vault_1", recoveredTaka.first().id)
+
+        val recoveredSales = MonthlySalesStore(context).loadAll()
+        assertEquals(1, recoveredSales.size)
+        assertEquals("ms_vault_1", recoveredSales.first().id)
+
+        assertFalse(OnlinePaymentStore(context).load().isOnlinePaymentEnabled)
+        assertEquals("https://example.com/member-app.apk", com.example.data.MemberAppLinkStore(context).getDownloadUrl())
+
+        val recoveredDrive = com.example.data.GoogleDriveBackupStore(context).loadStatus()
+        assertTrue(recoveredDrive.isConnected)
+        assertEquals(
+            "content://com.android.externalstorage.documents/document/backup.json",
+            recoveredDrive.safDocumentUri
+        )
+        assertEquals(1_700_000_123_000L, recoveredDrive.lastBackupAtMs)
+
+        // Explicit deletion/clear must update vault too so deleted records do NOT resurrect
+        MemberStore(context).saveAll(emptyList())
+        LocalTransactionStore(context).clearAll()
+        context.getSharedPreferences("hisab_members_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        context.getSharedPreferences("hisab_local_transactions_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        assertTrue(MemberStore(context).loadAll().isEmpty())
+        assertTrue(LocalTransactionStore(context).loadAll().isEmpty())
     }
 }
 

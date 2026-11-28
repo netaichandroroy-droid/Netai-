@@ -13,27 +13,62 @@ class OnlinePaymentStore(
     ownerScope: String = ADMIN_SCOPE
 ) {
 
+    private val appContext = context.applicationContext
+    private val vaultSection = "online_payment_$ownerScope"
     private val prefsName = if (ownerScope == ADMIN_SCOPE) {
         PREFS_NAME
     } else {
         "${PREFS_NAME}_${ownerScope}"
     }
 
-    private val prefs = context.applicationContext.getSharedPreferences(
+    private val prefs = appContext.getSharedPreferences(
         prefsName,
         Context.MODE_PRIVATE
     )
 
     fun load(): OnlinePaymentConfig {
-        val enabled = prefs.getBoolean(KEY_ENABLED, true)
-        val rawAccounts = prefs.getString(KEY_ACCOUNTS, null)
-        if (rawAccounts.isNullOrBlank()) {
-            return OnlinePaymentConfig(
-                isOnlinePaymentEnabled = enabled,
-                accounts = OnlinePaymentConfig.defaultAccounts()
-            )
+        val rawAccountsFromPrefs = if (prefs.contains(KEY_ACCOUNTS)) prefs.getString(KEY_ACCOUNTS, null) else null
+        if (!rawAccountsFromPrefs.isNullOrBlank()) {
+            val enabled = prefs.getBoolean(KEY_ENABLED, true)
+            val parsedAccounts = parseAccountsJson(rawAccountsFromPrefs)
+            if (parsedAccounts != null) {
+                return OnlinePaymentConfig(
+                    isOnlinePaymentEnabled = enabled,
+                    accounts = parsedAccounts
+                )
+            }
         }
-        val parsed = runCatching {
+
+        val vaultRaw = DurableLocalVault.getSection(appContext, vaultSection)
+        if (!vaultRaw.isNullOrBlank()) {
+            val recovered = runCatching {
+                val root = JSONObject(vaultRaw)
+                val enabled = root.optBoolean("enabled", true)
+                val accountsJson = root.optString("accounts", "")
+                val accounts = parseAccountsJson(accountsJson) ?: return@runCatching null
+                prefs.edit(commit = true) {
+                    putBoolean(KEY_ENABLED, enabled)
+                    putString(KEY_ACCOUNTS, accountsJson)
+                }
+                OnlinePaymentConfig(
+                    isOnlinePaymentEnabled = enabled,
+                    accounts = accounts
+                )
+            }.getOrNull()
+            if (recovered != null) {
+                return recovered
+            }
+        }
+
+        val enabled = prefs.getBoolean(KEY_ENABLED, true)
+        return OnlinePaymentConfig(
+            isOnlinePaymentEnabled = enabled,
+            accounts = OnlinePaymentConfig.defaultAccounts()
+        )
+    }
+
+    private fun parseAccountsJson(rawAccounts: String): List<OnlinePaymentAccount>? {
+        return runCatching {
             val array = JSONArray(rawAccounts)
             val byId = LinkedHashMap<String, OnlinePaymentAccount>()
             OnlinePaymentConfig.defaultAccounts().forEach { byId[it.id] = it }
@@ -52,12 +87,7 @@ class OnlinePaymentStore(
                 )
             }
             byId.values.toList()
-        }.getOrElse { OnlinePaymentConfig.defaultAccounts() }
-
-        return OnlinePaymentConfig(
-            isOnlinePaymentEnabled = enabled,
-            accounts = parsed
-        )
+        }.getOrNull()
     }
 
     fun save(config: OnlinePaymentConfig) {
@@ -72,10 +102,16 @@ class OnlinePaymentStore(
             }
             array.put(obj)
         }
+        val accountsJson = array.toString()
         prefs.edit(commit = true) {
             putBoolean(KEY_ENABLED, config.isOnlinePaymentEnabled)
-            putString(KEY_ACCOUNTS, array.toString())
+            putString(KEY_ACCOUNTS, accountsJson)
         }
+        val vaultPayload = JSONObject().apply {
+            put("enabled", config.isOnlinePaymentEnabled)
+            put("accounts", accountsJson)
+        }.toString()
+        DurableLocalVault.putSection(appContext, vaultSection, vaultPayload)
     }
 
     companion object {

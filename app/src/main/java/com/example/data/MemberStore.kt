@@ -17,13 +17,30 @@ sealed interface MemberLoginResult {
 
 class MemberStore(context: Context) {
 
-    private val prefs = context.applicationContext.getSharedPreferences(
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(
         PREFS_NAME,
         Context.MODE_PRIVATE
     )
 
     fun loadAll(): List<Member> {
-        val raw = prefs.getString(KEY_MEMBERS, null) ?: return emptyList()
+        val rawFromPrefs = if (prefs.contains(KEY_MEMBERS)) prefs.getString(KEY_MEMBERS, null) else null
+        val parsedFromPrefs = rawFromPrefs?.let { parseMembersJson(it) }
+        if (parsedFromPrefs != null) {
+            return parsedFromPrefs
+        }
+        val rawFromVault = DurableLocalVault.getSection(appContext, VAULT_SECTION)
+        val parsedFromVault = rawFromVault?.let { parseMembersJson(it) }
+        if (parsedFromVault != null) {
+            prefs.edit(commit = true) {
+                putString(KEY_MEMBERS, rawFromVault)
+            }
+            return parsedFromVault
+        }
+        return emptyList()
+    }
+
+    private fun parseMembersJson(raw: String): List<Member>? {
         return runCatching {
             val array = JSONArray(raw)
             val list = ArrayList<Member>(array.length())
@@ -54,7 +71,7 @@ class MemberStore(context: Context) {
                 )
             }
             list.sortedBy { it.createdAtMs }
-        }.getOrDefault(emptyList())
+        }.getOrNull()
     }
 
     fun findById(memberId: String): Member? {
@@ -84,9 +101,11 @@ class MemberStore(context: Context) {
             }
             array.put(obj)
         }
+        val json = array.toString()
         prefs.edit(commit = true) {
-            putString(KEY_MEMBERS, array.toString())
+            putString(KEY_MEMBERS, json)
         }
+        DurableLocalVault.putSection(appContext, VAULT_SECTION, json)
     }
 
     fun verifyMemberLogin(loginId: String, rawPassword: String): MemberLoginResult {
@@ -223,5 +242,6 @@ class MemberStore(context: Context) {
         private const val MIN_CUSTOM_PASSWORD_LENGTH = 4
         private const val PREFS_NAME = "hisab_members_prefs"
         private const val KEY_MEMBERS = "members_json"
+        private const val VAULT_SECTION = "members_json"
     }
 }

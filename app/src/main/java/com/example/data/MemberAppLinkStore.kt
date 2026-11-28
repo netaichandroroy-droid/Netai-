@@ -16,7 +16,20 @@ class MemberAppLinkStore(context: Context) {
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     fun getDownloadUrl(): String {
-        return prefs.getString(KEY_DOWNLOAD_URL, "")?.trim().orEmpty()
+        val fromPrefs = if (prefs.contains(KEY_DOWNLOAD_URL)) {
+            prefs.getString(KEY_DOWNLOAD_URL, "")?.trim().orEmpty()
+        } else {
+            ""
+        }
+        if (fromPrefs.isNotEmpty()) return fromPrefs
+        if (!prefs.contains(KEY_DOWNLOAD_URL)) {
+            val fromVault = DurableLocalVault.getSection(appContext, VAULT_SECTION)?.trim().orEmpty()
+            if (fromVault.isNotEmpty()) {
+                prefs.edit(commit = true) { putString(KEY_DOWNLOAD_URL, fromVault) }
+                return fromVault
+            }
+        }
+        return ""
     }
 
     fun getEffectiveMemberLink(): String {
@@ -37,6 +50,7 @@ class MemberAppLinkStore(context: Context) {
         val cleaned = rawUrl.trim()
         if (cleaned.isEmpty()) {
             prefs.edit(commit = true) { remove(KEY_DOWNLOAD_URL) }
+            DurableLocalVault.removeSection(appContext, VAULT_SECTION)
             return Result.success("")
         }
         if (cleaned.any { it.isWhitespace() }) {
@@ -58,6 +72,7 @@ class MemberAppLinkStore(context: Context) {
         prefs.edit(commit = true) {
             putString(KEY_DOWNLOAD_URL, normalized)
         }
+        DurableLocalVault.putSection(appContext, VAULT_SECTION, normalized)
         return Result.success(normalized)
     }
 
@@ -93,6 +108,7 @@ class MemberAppLinkStore(context: Context) {
         const val DEFAULT_MEMBER_APP_URL = "https://ais-pre-ki27a5iyxvtqdalsscbv2a-223515846545.asia-east1.run.app"
         private const val PREFS_NAME = "hisab_member_app_link_prefs"
         private const val KEY_DOWNLOAD_URL = "member_app_download_url"
+        private const val VAULT_SECTION = "member_app_download_url"
         private const val SHARE_DIR_NAME = "share"
         private const val APK_SHARE_FILE_NAME = "Member_Mobile_App.apk"
         private val HAS_SCHEME_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")
