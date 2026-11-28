@@ -37,6 +37,7 @@ import com.example.auth.AppLockCredentialStore
 import com.example.auth.AppSession
 import com.example.auth.attemptAutoSignIn
 import com.example.auth.authStateFlow
+import com.example.auth.handleLegacyGoogleSignInResult
 import com.example.auth.onGoogleSignInClicked
 import com.example.auth.safeFirebaseAuth
 import com.example.auth.signOutFromGoogleCloud
@@ -125,7 +126,7 @@ fun AppContent(
     }
     val credentialStore = remember(context) { AppLockCredentialStore(context) }
     val memberStore = remember(context) { MemberStore(context) }
-    val firebaseAuth = remember { safeFirebaseAuth() }
+    val firebaseAuth = remember(context) { safeFirebaseAuth(context) }
     val appUpdateController = remember(context) { AppAutoUpdateController(context) }
     val appUpdateState by appUpdateController.state.collectAsStateWithLifecycle()
 
@@ -246,6 +247,40 @@ fun AppContent(
         }
     }
 
+    val legacyGoogleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        handleLegacyGoogleSignInResult(
+            context = context,
+            data = result.data,
+            resultCode = result.resultCode,
+            scope = scope,
+            onAuthSuccess = {
+                currentUser = runCatching { safeFirebaseAuth(context)?.currentUser }.getOrNull()
+                isSigningIn = false
+                authError = null
+            },
+            onAuthError = { msg ->
+                currentUser = runCatching { safeFirebaseAuth(context)?.currentUser }.getOrNull()
+                isSigningIn = false
+                authError = msg
+            },
+            onAuthCancelled = {
+                currentUser = runCatching { safeFirebaseAuth(context)?.currentUser }.getOrNull()
+                isSigningIn = false
+            }
+        )
+    }
+
+    val launchLegacySignIn: (Intent) -> Unit = { signInIntent ->
+        runCatching {
+            legacyGoogleSignInLauncher.launch(signInIntent)
+        }.onFailure { err ->
+            isSigningIn = false
+            authError = err.localizedMessage ?: "Could not open Google Sign-In."
+        }
+    }
+
     val handleCloudSignIn: () -> Unit = {
         isSigningIn = true
         authError = null
@@ -253,7 +288,7 @@ fun AppContent(
             context = context,
             credentialManager = credentialManager,
             onAuthSuccess = {
-                currentUser = runCatching { safeFirebaseAuth()?.currentUser }.getOrNull()
+                currentUser = runCatching { safeFirebaseAuth(context)?.currentUser }.getOrNull()
                 isSigningIn = false
                 authError = null
             },
@@ -264,7 +299,8 @@ fun AppContent(
             scope = scope,
             onAuthCancelled = {
                 isSigningIn = false
-            }
+            },
+            onLaunchLegacyFallback = launchLegacySignIn
         )
     }
 
@@ -278,20 +314,21 @@ fun AppContent(
                 cloudSyncRepository?.stopAutoSync()
             },
             onAuthSuccess = {
-                currentUser = runCatching { safeFirebaseAuth()?.currentUser }.getOrNull()
+                currentUser = runCatching { safeFirebaseAuth(context)?.currentUser }.getOrNull()
                 isSigningIn = false
                 authError = null
             },
             onAuthError = { msg ->
-                currentUser = runCatching { safeFirebaseAuth()?.currentUser }.getOrNull()
+                currentUser = runCatching { safeFirebaseAuth(context)?.currentUser }.getOrNull()
                 isSigningIn = false
                 authError = msg
             },
             scope = scope,
             onAuthCancelled = {
-                currentUser = runCatching { safeFirebaseAuth()?.currentUser }.getOrNull()
+                currentUser = runCatching { safeFirebaseAuth(context)?.currentUser }.getOrNull()
                 isSigningIn = false
-            }
+            },
+            onLaunchLegacyFallback = launchLegacySignIn
         )
     }
 
@@ -304,7 +341,7 @@ fun AppContent(
                 cloudSyncRepository?.stopAutoSync()
             },
             onSignOutComplete = {
-                currentUser = runCatching { safeFirebaseAuth()?.currentUser }.getOrNull()
+                currentUser = runCatching { safeFirebaseAuth(context)?.currentUser }.getOrNull()
                 authError = null
             }
         )

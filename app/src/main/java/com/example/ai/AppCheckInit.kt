@@ -7,7 +7,7 @@ import android.util.Log
 import androidx.core.content.edit
 import com.example.BuildConfig
 import com.example.R
-import com.google.firebase.FirebaseApp
+import com.example.auth.ensureFirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.recaptcha.RecaptchaAppCheckProviderFactory
@@ -21,11 +21,7 @@ private const val DEBUG_SECRET_KEY = "com.google.firebase.appcheck.debug.DEBUG_S
 @SuppressLint("ApplySharedPref")
 fun configureAppCheck(context: Context, intent: Intent?) {
     try {
-        val app = if (FirebaseApp.getApps(context).isEmpty()) {
-            FirebaseApp.initializeApp(context)
-        } else {
-            FirebaseApp.getInstance()
-        }
+        val app = ensureFirebaseApp(context)
         if (app == null) {
             Log.w(TAG, "FirebaseApp could not be initialized; skipping App Check setup.")
             return
