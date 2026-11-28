@@ -17,12 +17,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalance
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.ArrowDownward
-import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,50 +27,44 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.R
-import com.example.model.AccountType
+import com.example.model.AccountsBreakdownCalculator
 import com.example.model.BanglaFormatters
+import com.example.model.BangladeshBankDirectory
 import com.example.model.HisabTransaction
-import com.example.model.TxType
+import com.example.model.MemberTakaJoma
 import com.example.ui.components.GlossyNeonIconOrb
 import com.example.ui.components.SectionPanelCard
 import com.example.ui.theme.ExpenseCrimson
-import com.example.ui.theme.ExpenseSurface
 import com.example.ui.theme.IncomeEmerald
 import com.example.ui.theme.IncomeSurface
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonEmerald
-import com.example.ui.theme.NeonGold
 import com.example.ui.theme.NeonPurple
 
 @Composable
 fun AccountsScreen(
     transactions: List<HisabTransaction>,
+    memberTakaJomaList: List<MemberTakaJoma> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val incomeColor = IncomeEmerald
     val expenseColor = ExpenseCrimson
 
-    val totalIncome = remember(transactions) {
-        transactions.filter { it.resolvedType == TxType.INCOME }.sumOf { it.amount }
+    val paymentMethodTotals = remember(transactions, memberTakaJomaList) {
+        AccountsBreakdownCalculator.buildPaymentMethodTotals(
+            transactions = transactions,
+            submissions = memberTakaJomaList
+        )
     }
-    val totalExpense = remember(transactions) {
-        transactions.filter { it.resolvedType == TxType.EXPENSE }.sumOf { it.amount }
-    }
-    val netBalance = totalIncome - totalExpense
-    val bankNetBalance = remember(transactions) {
-        val bankItems = transactions.filter { it.resolvedAccount == AccountType.BANK }
-        val bankIncome = bankItems.filter { it.resolvedType == TxType.INCOME }.sumOf { it.amount }
-        val bankExpense = bankItems.filter { it.resolvedType == TxType.EXPENSE }.sumOf { it.amount }
-        bankIncome - bankExpense
+    val combinedMethodTotal = remember(paymentMethodTotals) {
+        paymentMethodTotals.sumOf { it.balance }
     }
 
     Column(
@@ -92,25 +83,28 @@ fun AccountsScreen(
             secondaryGlow = NeonEmerald
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("accounts_member_payment_methods_header"),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.accounts_summary),
-                    style = MaterialTheme.typography.titleLarge,
+                    text = "Payment Method Wise Total",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
+                    color = IncomeSurface
                 ) {
                     Text(
-                        text = BanglaFormatters.formatBdt(netBalance),
+                        text = BanglaFormatters.formatBdt(combinedMethodTotal),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = if (combinedMethodTotal >= 0) incomeColor else expenseColor,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
@@ -119,90 +113,92 @@ fun AccountsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             AccountListDivider()
 
-            AccountType.entries.forEachIndexed { index, accountType ->
-                val accountItems = transactions.filter { it.resolvedAccount == accountType }
-                val income = accountItems.filter { it.resolvedType == TxType.INCOME }.sumOf { it.amount }
-                val expense = accountItems.filter { it.resolvedType == TxType.EXPENSE }.sumOf { it.amount }
-                val balance = income - expense
-
-                AccountListRow(
-                    icon = if (accountType == AccountType.CASH) {
-                        Icons.Outlined.Payments
-                    } else {
-                        Icons.Outlined.AccountBalance
-                    },
-                    title = accountType.bnTitle,
-                    txCount = accountItems.size,
-                    income = income,
-                    expense = expense,
-                    balance = balance,
-                    incomeColor = incomeColor,
-                    expenseColor = expenseColor,
-                    modifier = Modifier.testTag("account_card_${accountType.wireValue}")
+            if (paymentMethodTotals.isEmpty()) {
+                Text(
+                    text = "No payment entries",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp)
                 )
-
-                if (index < AccountType.entries.lastIndex) {
-                    AccountListDivider()
+            } else {
+                paymentMethodTotals.forEachIndexed { index, methodTotal ->
+                    val methodVisual = resolveMethodVisual(methodTotal.label)
+                    val safeSlug = methodTotal.label
+                        .lowercase()
+                        .replace(Regex("[^a-z0-9]+"), "_")
+                        .trim('_')
+                        .ifBlank { "other" }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp, horizontal = 2.dp)
+                            .testTag("member_payment_method_row_$safeSlug"),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        GlossyNeonIconOrb(
+                            icon = methodVisual.first,
+                            contentDescription = methodTotal.label,
+                            glowColor = methodVisual.second,
+                            iconTint = Color.White,
+                            size = 38.dp,
+                            iconSize = 18.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = methodTotal.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = if (methodTotal.expense > 0.0) {
+                                    "${methodTotal.txCount} entries • In ${BanglaFormatters.formatBdt(methodTotal.income)} / Out ${BanglaFormatters.formatBdt(methodTotal.expense)}"
+                                } else {
+                                    "${methodTotal.txCount} entries"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = BanglaFormatters.formatBdt(methodTotal.balance),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (methodTotal.balance >= 0) incomeColor else expenseColor,
+                            textAlign = TextAlign.End
+                        )
+                    }
+                    if (index < paymentMethodTotals.lastIndex) {
+                        AccountListDivider()
+                    }
                 }
             }
         }
-
-        SectionPanelCard(
-            modifier = Modifier.fillMaxWidth(),
-            accentColor = NeonPurple,
-            secondaryGlow = NeonGold
-        ) {
-            Text(
-                text = "Overall Summary",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            AccountListDivider()
-
-            AccountSummaryListRow(
-                icon = Icons.Outlined.ArrowDownward,
-                iconBg = IncomeSurface,
-                iconTint = IncomeEmerald,
-                label = "Total Income (All Accounts)",
-                value = BanglaFormatters.formatBdt(totalIncome),
-                valueColor = incomeColor
-            )
-            AccountListDivider()
-
-            AccountSummaryListRow(
-                icon = Icons.Outlined.ArrowUpward,
-                iconBg = ExpenseSurface,
-                iconTint = ExpenseCrimson,
-                label = "Total Expense (All Accounts)",
-                value = BanglaFormatters.formatBdt(totalExpense),
-                valueColor = expenseColor
-            )
-            AccountListDivider()
-
-            AccountSummaryListRow(
-                icon = Icons.Outlined.AccountBalance,
-                iconBg = MaterialTheme.colorScheme.primaryContainer,
-                iconTint = MaterialTheme.colorScheme.primary,
-                label = "All Banks Combined Balance",
-                value = BanglaFormatters.formatBdt(bankNetBalance),
-                valueColor = if (bankNetBalance >= 0) MaterialTheme.colorScheme.primary else expenseColor,
-                modifier = Modifier.testTag("all_banks_combined_total_row")
-            )
-            AccountListDivider()
-
-            AccountSummaryListRow(
-                icon = Icons.Outlined.AccountBalanceWallet,
-                iconBg = MaterialTheme.colorScheme.primaryContainer,
-                iconTint = MaterialTheme.colorScheme.primary,
-                label = "Remaining Net Balance",
-                value = BanglaFormatters.formatBdt(netBalance),
-                valueColor = if (netBalance >= 0) MaterialTheme.colorScheme.primary else expenseColor,
-                modifier = Modifier.testTag("all_accounts_grand_total_row")
-            )
-        }
     }
+}
+
+private fun resolveMethodVisual(methodName: String): Pair<ImageVector, Color> {
+    val cleaned = methodName.trim()
+    if (cleaned.contains("Cash", ignoreCase = true) || cleaned.contains("\u0995\u09CD\u09AF\u09BE\u09B6")) {
+        return Icons.Outlined.Payments to NeonEmerald
+    }
+    val isMfs = BangladeshBankDirectory.MOBILE_BANKING_OPTIONS.any {
+        cleaned.contains(it.enName, ignoreCase = true) || cleaned.contains(it.bnName, ignoreCase = true)
+    } || cleaned.contains("bKash", ignoreCase = true) ||
+        cleaned.contains("Nagad", ignoreCase = true) ||
+        cleaned.contains("Rocket", ignoreCase = true) ||
+        cleaned.contains("Upay", ignoreCase = true) ||
+        cleaned.contains("MFS", ignoreCase = true)
+    if (isMfs) {
+        return Icons.Outlined.Smartphone to NeonPurple
+    }
+    return Icons.Outlined.AccountBalance to NeonCyan
 }
 
 @Composable
@@ -211,131 +207,4 @@ private fun AccountListDivider() {
         thickness = 1.dp,
         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
     )
-}
-
-@Composable
-private fun AccountListRow(
-    icon: ImageVector,
-    title: String,
-    txCount: Int,
-    income: Double,
-    expense: Double,
-    balance: Double,
-    incomeColor: Color,
-    expenseColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 7.dp, horizontal = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        GlossyNeonIconOrb(
-            icon = icon,
-            contentDescription = title,
-            glowColor = if (balance >= 0) NeonCyan else ExpenseCrimson,
-            iconTint = Color.White,
-            size = 42.dp,
-            iconSize = 20.dp
-        )
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "• $txCount entries",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(modifier = Modifier.height(1.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Income: ${BanglaFormatters.formatBdt(income)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = incomeColor,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "Expense: ${BanglaFormatters.formatBdt(expense)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = expenseColor,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = BanglaFormatters.formatBdt(balance),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (balance >= 0) MaterialTheme.colorScheme.onSurface else expenseColor,
-                textAlign = TextAlign.End
-            )
-            Text(
-                text = "Balance",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun AccountSummaryListRow(
-    icon: ImageVector,
-    iconBg: Color,
-    iconTint: Color,
-    label: String,
-    value: String,
-    valueColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 7.dp, horizontal = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        GlossyNeonIconOrb(
-            icon = icon,
-            contentDescription = null,
-            glowColor = iconTint,
-            iconTint = Color.White,
-            size = 38.dp,
-            iconSize = 18.dp
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = valueColor,
-            textAlign = TextAlign.End
-        )
-    }
 }

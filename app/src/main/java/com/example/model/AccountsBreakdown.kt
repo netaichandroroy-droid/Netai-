@@ -119,6 +119,59 @@ object AccountsBreakdownCalculator {
         )
     }
 
+    fun buildPaymentMethodTotals(
+        transactions: List<HisabTransaction>,
+        submissions: List<MemberTakaJoma> = emptyList()
+    ): List<AccountChannelTotal> {
+        val submissionById = submissions.associateBy { it.id }
+        val seenSubmissionIds = hashSetOf<String>()
+        val channelMap = linkedMapOf<String, ChannelAccumulator>()
+
+        for (tx in transactions) {
+            if (tx.id.startsWith(TAKA_JOMA_PREFIX)) {
+                seenSubmissionIds += tx.id.removePrefix(TAKA_JOMA_PREFIX)
+            }
+            val amount = tx.amount.coerceAtLeast(0.0)
+            val isIncome = tx.resolvedType == TxType.INCOME
+            val resolved = resolveChannel(tx, submissionById)
+            val displayLabel = if (resolved.channelLabel == "General Bank") {
+                "Bank"
+            } else {
+                resolved.channelLabel
+            }
+            val acc = channelMap.getOrPut(displayLabel) {
+                ChannelAccumulator(displayLabel, resolved.accountType)
+            }
+            acc.txCount += 1
+            if (isIncome) acc.income += amount else acc.expense += amount
+        }
+
+        for (entry in submissions) {
+            if (entry.resolvedStatus != TakaJomaStatus.APPROVED || entry.id in seenSubmissionIds) {
+                continue
+            }
+            val resolved = if (entry.bankName.isNotBlank()) {
+                classifyMethodName(entry.bankName)
+            } else {
+                ResolvedChannel(AccountType.CASH, "Cash")
+            }
+            val displayLabel = if (resolved.channelLabel == "General Bank") {
+                "Bank"
+            } else {
+                resolved.channelLabel
+            }
+            val acc = channelMap.getOrPut(displayLabel) {
+                ChannelAccumulator(displayLabel, resolved.accountType)
+            }
+            acc.txCount += 1
+            acc.income += entry.amount.coerceAtLeast(0.0)
+        }
+
+        return channelMap.values
+            .map { it.toChannelTotal() }
+            .sortedByDescending { kotlin.math.abs(it.balance) }
+    }
+
     private fun mobileBankSummaryOrFallback(summary: AccountTypeSummary): AccountTypeSummary = summary
 
     private data class ResolvedChannel(

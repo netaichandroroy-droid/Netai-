@@ -608,7 +608,8 @@ object ReportPictureRenderer {
             periodText = periodText,
             countLabel = "Total MPO: ${items.size}",
             tableHeading = "MPO Sales, Deposit & Dues List",
-            col2Header = "MPO & Area",
+            col2Header = "MPO Name",
+            salesHeader = "Value Sales",
             rows = rows,
             totals = totals
         )
@@ -671,6 +672,7 @@ object ReportPictureRenderer {
         countLabel: String,
         tableHeading: String,
         col2Header: String,
+        salesHeader: String = "TP+VAT sales",
         rows: List<RenderTableRow>,
         totals: ReportTotals
     ): Bitmap {
@@ -789,7 +791,7 @@ object ReportPictureRenderer {
             tableWidth * 0.19f,
             tableWidth * 0.18f
         )
-        val headers = listOf("SL", col2Header, "TP+VAT sales", "Deposit", "Dues")
+        val headers = listOf("SL", col2Header, salesHeader, "Deposit", "Dues")
         drawTableHeaderRow(canvas, MARGIN_X, y, tableWidth, tableHeaderHeight, colWidths, headers, boldTypeface)
         y += tableHeaderHeight
 

@@ -79,6 +79,7 @@ import com.example.ui.theme.NeonCyan
 fun ReportTotalsSummaryStrip(
     totals: ReportTotals,
     countLabel: String,
+    salesLabel: String = "TP+VAT sales",
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -117,7 +118,7 @@ fun ReportTotalsSummaryStrip(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             MiniReportKpiBox(
-                label = "TP+VAT sales",
+                label = salesLabel,
                 value = BanglaFormatters.formatBdt(totals.totalTpPlusVat),
                 valueColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)
@@ -235,14 +236,6 @@ fun ReportSearchField(
 fun MpoWiseReportSection(
     items: List<MemberReportItem>,
     totals: ReportTotals,
-    hasExplicitMpoMembers: Boolean,
-    onlyMpoDesignation: Boolean,
-    onToggleOnlyMpo: (Boolean) -> Unit,
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
-    selectedAreaFilter: String?,
-    availableAreas: List<String>,
-    onSelectAreaFilter: (String?) -> Unit,
     embedInFullCard: Boolean = false
 ) {
     var inspectingMember by remember { mutableStateOf<MemberReportItem?>(null) }
@@ -281,99 +274,16 @@ fun MpoWiseReportSection(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        ReportTotalsSummaryStrip(
-            totals = totals,
-            countLabel = "MPO: ${items.size}"
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        if (hasExplicitMpoMembers) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = onlyMpoDesignation,
-                    onClick = { onToggleOnlyMpo(true) },
-                    label = { Text("MPO Only") },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.primary
-                    ),
-                    modifier = Modifier.testTag("mpo_filter_only_mpo")
-                )
-                FilterChip(
-                    selected = !onlyMpoDesignation,
-                    onClick = { onToggleOnlyMpo(false) },
-                    label = { Text("All Members") },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.primary
-                    ),
-                    modifier = Modifier.testTag("mpo_filter_all_members")
-                )
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-        } else if (items.isNotEmpty()) {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "Showing all members because no specific MPO designation was assigned.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        ReportSearchField(
-            query = searchQuery,
-            onQueryChange = onSearchQueryChange,
-            placeholder = "Search code, MPO name, or area...",
-            testTag = "mpo_report_search_input"
-        )
-
-        if (availableAreas.size > 1) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = selectedAreaFilter == null,
-                    onClick = { onSelectAreaFilter(null) },
-                    label = { Text("All Areas") }
-                )
-                availableAreas.forEach { areaName ->
-                    val selected = selectedAreaFilter.equals(areaName, ignoreCase = true)
-                    FilterChip(
-                        selected = selected,
-                        onClick = { onSelectAreaFilter(if (selected) null else areaName) },
-                        label = { Text(areaName) }
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
         if (items.isEmpty()) {
             EmptyReportNotice(
-                message = "No MPO sales or deposit records found for this period."
+                message = "No records found"
             )
         } else {
             val slW = 36.dp
             val codeW = remember(items, density) { measureCol("Code", items.map { it.summary.code }, 48.dp, 86.dp) }
-            val nameW = remember(items, density) { measureCol("MPO & Area", items.map { it.summary.name }, 96.dp, 165.dp) }
+            val nameW = remember(items, density) { measureCol("MPO Name", items.map { it.summary.name }, 96.dp, 165.dp) }
             val salesW = remember(items, totals, density) {
-                measureCol("TP+VAT sales", items.map { BanglaFormatters.formatBdt(it.summary.totalSales) } + BanglaFormatters.formatBdt(totals.totalTpPlusVat), 90.dp, 142.dp)
+                measureCol("Value Sales", items.map { BanglaFormatters.formatBdt(it.summary.totalSales) } + BanglaFormatters.formatBdt(totals.totalTpPlusVat), 90.dp, 142.dp)
             }
             val jomaW = remember(items, totals, density) {
                 measureCol("Deposit", items.map { BanglaFormatters.formatBdt(it.summary.approvedJoma) } + BanglaFormatters.formatBdt(totals.approvedJoma), 78.dp, 124.dp)
@@ -381,10 +291,9 @@ fun MpoWiseReportSection(
             val duesW = remember(items, totals, density) {
                 measureCol("Dues", items.map { BanglaFormatters.formatBdt(it.summary.dues) } + BanglaFormatters.formatBdt(totals.dues), 74.dp, 120.dp)
             }
-            val pctW = 72.dp
 
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val baseTotal = slW + codeW + nameW + salesW + jomaW + duesW + pctW + 8.dp
+                val baseTotal = slW + codeW + nameW + salesW + jomaW + duesW + 7.dp
                 val extra = (maxWidth - baseTotal).coerceAtLeast(0.dp)
                 val resolvedNameW = nameW + (extra * 0.40f)
                 val resolvedSalesW = salesW + (extra * 0.20f)
@@ -407,15 +316,13 @@ fun MpoWiseReportSection(
                             RVerticalBorder(borderColor)
                             RTableHeaderCell("Code", codeW, tableHeaderStyle, TextAlign.Center)
                             RVerticalBorder(borderColor)
-                            RTableHeaderCell("MPO & Area", resolvedNameW, tableHeaderStyle, TextAlign.Start)
+                            RTableHeaderCell("MPO Name", resolvedNameW, tableHeaderStyle, TextAlign.Start)
                             RVerticalBorder(borderColor)
-                            RTableHeaderCell("TP+VAT sales", resolvedSalesW, tableHeaderStyle, TextAlign.End)
+                            RTableHeaderCell("Value Sales", resolvedSalesW, tableHeaderStyle, TextAlign.End)
                             RVerticalBorder(borderColor)
                             RTableHeaderCell("Deposit", resolvedJomaW, tableHeaderStyle, TextAlign.End)
                             RVerticalBorder(borderColor)
                             RTableHeaderCell("Dues", resolvedDuesW, tableHeaderStyle, TextAlign.End)
-                            RVerticalBorder(borderColor)
-                            RTableHeaderCell("Collection", pctW, tableHeaderStyle, TextAlign.Center)
                         }
                         HorizontalDivider(thickness = 1.dp, color = borderColor)
 
@@ -505,14 +412,6 @@ fun MpoWiseReportSection(
                                     color = if (item.summary.dues > 0.0) ExpenseCrimson else IncomeEmerald,
                                     textAlign = TextAlign.End
                                 )
-                                RVerticalBorder(borderColor)
-                                RTableCell(
-                                    text = "${BanglaFormatters.toBanglaDigits(item.collectionPercent.toString())}%",
-                                    width = pctW,
-                                    style = tableBodyStyle.copy(fontWeight = FontWeight.Bold),
-                                    color = BrandPrimary,
-                                    textAlign = TextAlign.Center
-                                )
                             }
                             HorizontalDivider(thickness = 1.dp, color = borderColor)
                         }
@@ -571,14 +470,6 @@ fun MpoWiseReportSection(
                                 style = tableBodyStyle.copy(fontWeight = FontWeight.Bold),
                                 color = if (totals.dues > 0.0) ExpenseCrimson else IncomeEmerald,
                                 textAlign = TextAlign.End
-                            )
-                            RVerticalBorder(borderColor)
-                            RTableCell(
-                                text = "${BanglaFormatters.toBanglaDigits(totals.collectionPercent.toString())}%",
-                                width = pctW,
-                                style = tableBodyStyle.copy(fontWeight = FontWeight.Bold),
-                                color = BrandPrimary,
-                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -652,12 +543,6 @@ fun GroupedWiseReportSection(
     category: ReportCategory,
     groups: List<GroupedReportRow>,
     totals: ReportTotals,
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
-    customTitle: String? = null,
-    customSubtitle: String? = null,
-    noticeBanner: String? = null,
-    headerFilterContent: (@Composable () -> Unit)? = null,
     embedInFullCard: Boolean = false
 ) {
     var inspectingGroup by remember { mutableStateOf<GroupedReportRow?>(null) }
@@ -667,41 +552,14 @@ fun GroupedWiseReportSection(
         ReportCategory.AM_WISE -> Icons.Outlined.SupervisorAccount
         else -> Icons.Outlined.Public
     }
-    val resolvedTitle = customTitle ?: category.title
+    val resolvedTitle = category.title
     val col2Header = when (category) {
         ReportCategory.ASM_DEPOT_WISE -> "Depot / ASM"
         ReportCategory.ASM_NAME_WISE -> "ASM Name"
         ReportCategory.AM_WISE -> "Area / Lead"
         else -> "Region / Depot"
     }
-    val countChipLabel = when (category) {
-        ReportCategory.ASM_DEPOT_WISE ->
-            "Depots: ${groups.size} • Members: ${totals.memberCount}"
-        ReportCategory.ASM_NAME_WISE ->
-            "ASMs: ${groups.size} • Members: ${totals.memberCount}"
-        ReportCategory.AM_WISE ->
-            "Areas: ${groups.size} • Members: ${totals.memberCount}"
-        else ->
-            "Regions: ${groups.size} • Members: ${totals.memberCount}"
-    }
-    val searchPlaceholder = when (category) {
-        ReportCategory.ASM_DEPOT_WISE -> "Search depot or ASM name..."
-        ReportCategory.ASM_NAME_WISE -> "Search ASM name, code, or depot..."
-        ReportCategory.AM_WISE -> "Search area or RSM / RSC / AM name..."
-        else -> "Search region / depot or RM..."
-    }
-    val searchTestTag = when (category) {
-        ReportCategory.ASM_DEPOT_WISE -> "asm_depot_report_search_input"
-        ReportCategory.ASM_NAME_WISE -> "asm_name_report_search_input"
-        ReportCategory.AM_WISE -> "am_report_search_input"
-        else -> "region_report_search_input"
-    }
-    val emptyMessage = when (category) {
-        ReportCategory.ASM_DEPOT_WISE -> "No ASM depot records found for this period."
-        ReportCategory.ASM_NAME_WISE -> "No ASM name records found for this period."
-        ReportCategory.AM_WISE -> "No RSM / RSC / AM area records found for this period."
-        else -> "No region or depot records found for this period."
-    }
+    val emptyMessage = "No records found"
 
     val borderColor = MaterialTheme.colorScheme.outline
     val textMeasurer = rememberTextMeasurer()
@@ -736,147 +594,11 @@ fun GroupedWiseReportSection(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-        } else if (customTitle != null && customTitle != category.title) {
-            Text(
-                text = customTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
         }
-
-        ReportTotalsSummaryStrip(
-            totals = totals,
-            countLabel = countChipLabel
-        )
-
-        if (headerFilterContent != null) {
-            Spacer(modifier = Modifier.height(10.dp))
-            headerFilterContent()
-        }
-
-        if (!noticeBanner.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = noticeBanner,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ReportSearchField(
-            query = searchQuery,
-            onQueryChange = onSearchQueryChange,
-            placeholder = searchPlaceholder,
-            testTag = searchTestTag
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
 
         if (groups.isEmpty()) {
             EmptyReportNotice(message = emptyMessage)
         } else {
-            // Visual progress summary cards for top groups
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                groups.forEach { group ->
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
-                        border = BorderStroke(0.5.dp, borderColor),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { inspectingGroup = group }
-                            .testTag("grouped_report_card_${group.key}")
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = group.title,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "${group.leaderLabel} • ${group.memberCount} members",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = IncomeSurface
-                                ) {
-                                    Text(
-                                        text = "Collection ${group.collectionPercent}%",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = IncomeEmerald,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(7.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth((group.collectionPercent / 100f).coerceIn(0f, 1f))
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(IncomeEmerald)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "TP+VAT sales: ${BanglaFormatters.formatBdt(group.totalTpPlusVat)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Deposit: ${BanglaFormatters.formatBdt(group.approvedJoma)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = IncomeEmerald
-                                )
-                                Text(
-                                    text = "Dues: ${BanglaFormatters.formatBdt(group.dues)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (group.dues > 0.0) ExpenseCrimson else IncomeEmerald
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
             // Bordered Table View
             val slW = 36.dp
             val titleW = remember(groups, density) { measureCol(col2Header, groups.map { it.title }, 96.dp, 165.dp) }

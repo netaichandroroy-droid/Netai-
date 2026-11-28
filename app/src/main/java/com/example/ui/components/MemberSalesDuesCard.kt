@@ -68,6 +68,7 @@ fun MemberSalesDuesCard(
     members: List<Member>,
     monthlySales: List<MonthlySalesRecord>,
     submissions: List<MemberTakaJoma>,
+    embeddedInOuterCard: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
@@ -149,13 +150,10 @@ fun MemberSalesDuesCard(
         )
     }
 
-    GlassCardSurface(
-        modifier = modifier.testTag("admin_member_sales_dues_card"),
-        contentPadding = PaddingValues(vertical = 8.dp)
-    ) {
+    val cardContent: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit = {
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
             Text(
-                text = "Member TP+VAT sales & Dues",
+                text = "Sales & Dues",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -262,9 +260,9 @@ fun MemberSalesDuesCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (summaries.isEmpty()) {
-                            "Add members or upload a sales sheet to view sales and dues."
+                            "No sales or dues data"
                         } else {
-                            "No members currently have dues."
+                            "No dues"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -522,6 +520,22 @@ fun MemberSalesDuesCard(
                 }
             }
         }
+    }
+
+    if (embeddedInOuterCard) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .testTag("admin_member_sales_dues_card"),
+            content = cardContent
+        )
+    } else {
+        GlassCardSurface(
+            modifier = modifier.testTag("admin_member_sales_dues_card"),
+            contentPadding = PaddingValues(vertical = 8.dp),
+            content = cardContent
+        )
     }
 
     inspectingSummary?.let { item ->

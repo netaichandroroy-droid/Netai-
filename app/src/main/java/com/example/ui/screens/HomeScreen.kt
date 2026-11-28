@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,13 +12,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,9 +40,10 @@ import com.example.ui.components.DepositsSalesNetBalanceCard
 import com.example.ui.components.GlossyInnerMetricTile
 import com.example.ui.components.HeroBalanceCard
 import com.example.ui.components.MemberSalesDuesCard
-import com.example.ui.components.SectionPanelCard
+import com.example.ui.components.glossyMetallicSurface
 import com.example.ui.theme.ExpenseCrimson
 import com.example.ui.theme.ExpenseCrimsonDark
+import com.example.ui.theme.GlassTextPrimary
 import com.example.ui.theme.IncomeEmeraldDark
 import com.example.ui.theme.NagadAccent
 import com.example.ui.theme.NeonCyan
@@ -104,171 +109,212 @@ fun HomeScreen(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         item {
-            DepositsSalesNetBalanceCard(
-                summary = depositsSalesSummary,
-                cloudSyncState = cloudSyncState,
-                onConnectFirestore = onConnectCloudSync
-            )
-        }
-
-        item {
-            HeroBalanceCard(
-                balance = balance,
-                totalIncome = totalIncome,
-                totalExpense = totalExpense
-            )
-        }
-
-        // Today's BDT (৳) Income & Expense summary card
-        item {
-            SectionPanelCard(
-                modifier = Modifier.fillMaxWidth(),
-                accentColor = NeonCyan,
-                secondaryGlow = NeonGold
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp)
+                    .glossyMetallicSurface(
+                        shape = RoundedCornerShape(20.dp),
+                        accentColor = NeonCyan,
+                        secondaryGlow = if (depositsSalesSummary.netBalance >= 0.0) {
+                            NeonEmerald
+                        } else {
+                            ExpenseCrimson
+                        },
+                        borderWidth = 1.6.dp,
+                        isHero = true
+                    )
+                    .testTag("home_unified_card")
             ) {
-                Text(
-                    text = "Today's Summary (${BanglaFormatters.formatBanglaDate(todayIso)})",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(7.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    GlossyInnerMetricTile(
-                        modifier = Modifier.weight(1f),
-                        accentColor = NeonEmerald,
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                            Text(
-                                text = "Today's Income",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = incomeText
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = BanglaFormatters.formatBdt(todayIncome),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = incomeText
-                            )
-                        }
-                    }
-
-                    GlossyInnerMetricTile(
-                        modifier = Modifier.weight(1f),
-                        accentColor = ExpenseCrimson,
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                            Text(
-                                text = "Today's Expense",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = expenseText
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = BanglaFormatters.formatBdt(todayExpense),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = expenseText
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(7.dp))
-
-                GlossyInnerMetricTile(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("today_approved_member_joma_banner"),
-                    accentColor = NeonEmerald,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 7.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Approved Member Deposits (Today)",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = incomeText,
-                            modifier = Modifier.weight(1f)
+                CompositionLocalProvider(LocalContentColor provides GlassTextPrimary) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        DepositsSalesNetBalanceCard(
+                            summary = depositsSalesSummary,
+                            cloudSyncState = cloudSyncState,
+                            onConnectFirestore = onConnectCloudSync,
+                            embeddedInOuterCard = true
                         )
-                        Text(
-                            text = BanglaFormatters.formatBdt(todayApprovedMemberJoma),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = incomeText
-                        )
-                    }
-                }
 
-                if (pendingMemberJomaList.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(5.dp))
-                    GlossyInnerMetricTile(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("today_pending_member_joma_banner"),
-                        accentColor = NeonGold,
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
+                        HorizontalDivider(
+                            thickness = 0.8.dp,
+                            color = Color.White.copy(alpha = 0.14f),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+
+                        HeroBalanceCard(
+                            balance = balance,
+                            totalIncome = totalIncome,
+                            totalExpense = totalExpense,
+                            embeddedInOuterCard = true
+                        )
+
+                        HorizontalDivider(
+                            thickness = 0.8.dp,
+                            color = Color.White.copy(alpha = 0.14f),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+
+                        // Today's BDT (৳) Income & Expense summary section
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 7.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
                             Text(
-                                text = "Pending (${pendingMemberJomaList.size} awaiting approval)",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = NagadAccent,
-                                modifier = Modifier.weight(1f)
+                                text = "Today's Summary",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                text = BanglaFormatters.formatBdt(pendingMemberJomaTotal),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = NagadAccent
-                            )
+                            Spacer(modifier = Modifier.height(7.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                GlossyInnerMetricTile(
+                                    modifier = Modifier.weight(1f),
+                                    accentColor = NeonEmerald,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                                        Text(
+                                            text = "Today's Income",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = incomeText
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = BanglaFormatters.formatBdt(todayIncome),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = incomeText
+                                        )
+                                    }
+                                }
+
+                                GlossyInnerMetricTile(
+                                    modifier = Modifier.weight(1f),
+                                    accentColor = ExpenseCrimson,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                                        Text(
+                                            text = "Today's Expense",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = expenseText
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = BanglaFormatters.formatBdt(todayExpense),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = expenseText
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(7.dp))
+
+                            GlossyInnerMetricTile(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("today_approved_member_joma_banner"),
+                                accentColor = NeonEmerald,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Approved Deposits (Today)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = incomeText,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = BanglaFormatters.formatBdt(todayApprovedMemberJoma),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = incomeText
+                                    )
+                                }
+                            }
+
+                            if (pendingMemberJomaList.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(5.dp))
+                                GlossyInnerMetricTile(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("today_pending_member_joma_banner"),
+                                    accentColor = NeonGold,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Pending (${pendingMemberJomaList.size})",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = NagadAccent,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(
+                                            text = BanglaFormatters.formatBdt(pendingMemberJomaTotal),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = NagadAccent
+                                        )
+                                    }
+                                }
+                            }
                         }
+
+                        HorizontalDivider(
+                            thickness = 0.8.dp,
+                            color = Color.White.copy(alpha = 0.14f),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+
+                        // Member Taka Joma Table (pending submissions only — disappears once Admin approves)
+                        AdminMemberTakaJomaTableCard(
+                            submissions = memberTakaJomaList,
+                            onDeleteSubmission = onDeleteMemberTakaJoma,
+                            onApproveSubmission = onApproveMemberTakaJoma,
+                            onRejectSubmission = onRejectMemberTakaJoma,
+                            onOpenForm = onOpenMemberTakaJoma,
+                            pendingOnlyMode = true,
+                            embeddedInOuterCard = true
+                        )
+
+                        HorizontalDivider(
+                            thickness = 0.8.dp,
+                            color = Color.White.copy(alpha = 0.14f),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+
+                        // Member Sales & Dues Summary (Dues decreases when Taka Joma is approved)
+                        MemberSalesDuesCard(
+                            members = members,
+                            monthlySales = monthlySales,
+                            submissions = memberTakaJomaList,
+                            embeddedInOuterCard = true
+                        )
                     }
                 }
             }
-        }
-
-        // Member Taka Joma Table (pending submissions only — disappears once Admin approves)
-        item {
-            AdminMemberTakaJomaTableCard(
-                submissions = memberTakaJomaList,
-                onDeleteSubmission = onDeleteMemberTakaJoma,
-                onApproveSubmission = onApproveMemberTakaJoma,
-                onRejectSubmission = onRejectMemberTakaJoma,
-                onOpenForm = onOpenMemberTakaJoma,
-                pendingOnlyMode = true
-            )
-        }
-
-        // Member Sales & Dues Summary (Dues decreases when Taka Joma is approved)
-        item {
-            MemberSalesDuesCard(
-                members = members,
-                monthlySales = monthlySales,
-                submissions = memberTakaJomaList
-            )
         }
     }
 }

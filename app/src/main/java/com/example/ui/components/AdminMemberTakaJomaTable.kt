@@ -180,7 +180,7 @@ fun AdminMemberTakaJomaTableCard(
             ) {
                 Text(
                     text = if (pendingOnlyMode) {
-                        "Pending Deposits (Approval)"
+                        "Pending Deposits"
                     } else {
                         "Member Deposits"
                     },
@@ -300,9 +300,9 @@ fun AdminMemberTakaJomaTableCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = when {
-                            pendingOnlyMode -> "No pending deposits awaiting approval."
-                            submissions.isEmpty() -> "Member deposit submissions will appear in this table."
-                            else -> "No deposit entries match this filter."
+                            pendingOnlyMode -> "No pending deposits"
+                            submissions.isEmpty() -> "No deposit entries"
+                            else -> "No matching entries"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

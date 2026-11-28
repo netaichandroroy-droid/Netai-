@@ -569,6 +569,7 @@ fun DepositsSalesNetBalanceCard(
     summary: DepositsSalesNetSummary,
     cloudSyncState: CloudSyncUiState = CloudSyncUiState(),
     onConnectFirestore: (() -> Unit)? = null,
+    embeddedInOuterCard: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val netBalance = summary.netBalance
@@ -606,13 +607,13 @@ fun DepositsSalesNetBalanceCard(
             )
     }
 
-    val updatedAtText = BanglaFormatters.formatUpdateTime(
-        cloudSyncState.lastSyncedAtMs.takeIf { it > 0L } ?: System.currentTimeMillis()
-    )
-
     val cardShape = RoundedCornerShape(20.dp)
-    Box(
-        modifier = modifier
+    val outerModifier = if (embeddedInOuterCard) {
+        modifier
+            .fillMaxWidth()
+            .testTag("firestore_net_balance_card")
+    } else {
+        modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp)
             .glossyMetallicSurface(
@@ -623,7 +624,8 @@ fun DepositsSalesNetBalanceCard(
                 isHero = true
             )
             .testTag("firestore_net_balance_card")
-    ) {
+    }
+    Box(modifier = outerModifier) {
         CompositionLocalProvider(LocalContentColor provides GlassTextPrimary) {
             Column(
                 modifier = Modifier
@@ -636,7 +638,7 @@ fun DepositsSalesNetBalanceCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Net Balance • $updatedAtText",
+                        text = "Net Balance",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = GlassTextSecondary,
@@ -780,11 +782,16 @@ fun HeroBalanceCard(
     balance: Double,
     totalIncome: Double,
     totalExpense: Double,
+    embeddedInOuterCard: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val cardShape = RoundedCornerShape(20.dp)
-    Box(
-        modifier = modifier
+    val outerModifier = if (embeddedInOuterCard) {
+        modifier
+            .fillMaxWidth()
+            .testTag("hero_balance_card")
+    } else {
+        modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp)
             .glossyMetallicSurface(
@@ -795,7 +802,8 @@ fun HeroBalanceCard(
                 isHero = true
             )
             .testTag("hero_balance_card")
-    ) {
+    }
+    Box(modifier = outerModifier) {
         CompositionLocalProvider(LocalContentColor provides GlassTextPrimary) {
             Column(
                 modifier = Modifier

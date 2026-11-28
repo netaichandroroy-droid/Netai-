@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.AccountBalance
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,11 +70,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -114,6 +125,9 @@ import com.example.ui.components.glossyMetallicSurface
 import com.example.ui.components.hisab3DFieldDepth
 import com.example.ui.components.isSuccessFeedbackMessage
 import com.example.ui.theme.BrandDeep
+import com.example.ui.theme.GlassTextPrimary
+import com.example.ui.theme.GlassTextSecondary
+import com.example.ui.theme.NeonBlue
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonEmerald
 import com.example.ui.screens.AccountsScreen
@@ -129,6 +143,7 @@ import com.example.ui.screens.SalesUploadScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.TransactionModalSheet
 import com.example.ui.screens.TransactionsScreen
+import com.example.ui.screens.reportCategoryGlowColor
 import com.example.ui.screens.reportCategoryIcon
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -256,6 +271,7 @@ fun HisabMainApp(
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showQuickAddMemberSheet by remember { mutableStateOf(false) }
     var showMemberAppLinkDialog by remember { mutableStateOf(false) }
+    var showReportMenuPopup by remember { mutableStateOf(false) }
     var exportPictureCategory by remember { mutableStateOf(ReportCategory.MONTHLY) }
     var memberAppDownloadUrl by remember { mutableStateOf(memberAppLinkStore.getDownloadUrl()) }
     var appLoginId by remember { mutableStateOf(credentialStore.getLoginId()) }
@@ -952,7 +968,28 @@ fun HisabMainApp(
                                 selected = selected,
                                 testTag = "nav_${tab.name.lowercase()}",
                                 onClick = {
-                                    viewModel.selectTab(tab)
+                                    if (tab == HisabTab.REPORTS) {
+                                        showReportMenuPopup = !showReportMenuPopup
+                                    } else {
+                                        showReportMenuPopup = false
+                                        viewModel.selectTab(tab)
+                                    }
+                                },
+                                popupContent = if (tab == HisabTab.REPORTS && showReportMenuPopup) {
+                                    {
+                                        ReportNavbarPopupMenu(
+                                            selectedCategory = controls.selectedReportCategory,
+                                            isReportsActive = controls.selectedTab == HisabTab.REPORTS &&
+                                                controls.isReportDetailOpen,
+                                            onDismiss = { showReportMenuPopup = false },
+                                            onSelectCategory = { category ->
+                                                showReportMenuPopup = false
+                                                viewModel.openReportCategory(category)
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    null
                                 }
                             )
                         }
@@ -973,20 +1010,39 @@ fun HisabMainApp(
                     ) {
                         HisabTab.entries.forEach { tab ->
                             val selected = controls.selectedTab == tab
-                            NavigationRailItem(
-                                selected = selected,
-                                onClick = {
-                                    viewModel.selectTab(tab)
-                                },
-                                icon = {
-                                    Icon(
-                                        imageVector = tabIcon(tab, selected),
-                                        contentDescription = tab.label
+                            Box {
+                                NavigationRailItem(
+                                    selected = selected,
+                                    onClick = {
+                                        if (tab == HisabTab.REPORTS) {
+                                            showReportMenuPopup = !showReportMenuPopup
+                                        } else {
+                                            showReportMenuPopup = false
+                                            viewModel.selectTab(tab)
+                                        }
+                                    },
+                                    icon = {
+                                        Icon(
+                                            imageVector = tabIcon(tab, selected),
+                                            contentDescription = tab.label
+                                        )
+                                    },
+                                    label = { Text(tab.label) },
+                                    modifier = Modifier.testTag("rail_${tab.name.lowercase()}")
+                                )
+                                if (tab == HisabTab.REPORTS && showReportMenuPopup) {
+                                    ReportNavbarPopupMenu(
+                                        selectedCategory = controls.selectedReportCategory,
+                                        isReportsActive = controls.selectedTab == HisabTab.REPORTS &&
+                                            controls.isReportDetailOpen,
+                                        onDismiss = { showReportMenuPopup = false },
+                                        onSelectCategory = { category ->
+                                            showReportMenuPopup = false
+                                            viewModel.openReportCategory(category)
+                                        }
                                     )
-                                },
-                                label = { Text(tab.label) },
-                                modifier = Modifier.testTag("rail_${tab.name.lowercase()}")
-                            )
+                                }
+                            }
                         }
                     }
                 }
@@ -1053,7 +1109,8 @@ fun HisabMainApp(
                         )
 
                         HisabTab.ACCOUNTS -> AccountsScreen(
-                            transactions = transactions
+                            transactions = transactions,
+                            memberTakaJomaList = takaJomaList
                         )
 
                         HisabTab.SETTINGS -> when (controls.settingsSubPage) {
@@ -1429,15 +1486,15 @@ fun HisabMainApp(
                     Text("Link Drive File")
                 }
             },
-            dismissButton = {
-                androidx.compose.material3.TextButton(
-                    onClick = { showDriveBlockedDialog = false },
-                    modifier = Modifier.testTag("drive_403_dismiss_button")
-                ) {
-                    Text("Close")
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { showDriveBlockedDialog = false },
+                        modifier = Modifier.testTag("drive_403_dismiss_button")
+                    ) {
+                        Text("Close")
+                    }
                 }
-            }
-        )
+            )
     }
 }
 
@@ -1697,4 +1754,116 @@ private fun tabIcon(tab: HisabTab, selected: Boolean): ImageVector = when (tab) 
     HisabTab.REPORTS -> if (selected) Icons.Filled.BarChart else Icons.Outlined.BarChart
     HisabTab.ACCOUNTS -> if (selected) Icons.Filled.AccountBalance else Icons.Outlined.AccountBalance
     HisabTab.SETTINGS -> if (selected) Icons.Filled.Settings else Icons.Outlined.Settings
+}
+
+@Composable
+private fun ReportNavbarPopupMenu(
+    selectedCategory: ReportCategory,
+    isReportsActive: Boolean,
+    onDismiss: () -> Unit,
+    onSelectCategory: (ReportCategory) -> Unit
+) {
+    val density = LocalDensity.current
+    val gapPx = with(density) { 8.dp.roundToPx() }
+    val marginPx = with(density) { 10.dp.roundToPx() }
+    val positionProvider = remember(gapPx, marginPx) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(
+                anchorBounds: IntRect,
+                windowSize: IntSize,
+                layoutDirection: LayoutDirection,
+                popupContentSize: IntSize
+            ): IntOffset {
+                val fitsAboveAnchor = anchorBounds.top >= popupContentSize.height + gapPx + marginPx
+                if (fitsAboveAnchor) {
+                    val centeredX = anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2
+                    val maxX = (windowSize.width - popupContentSize.width - marginPx).coerceAtLeast(marginPx)
+                    val x = centeredX.coerceIn(marginPx, maxX)
+                    val y = anchorBounds.top - popupContentSize.height - gapPx
+                    return IntOffset(x, y)
+                }
+                val rightX = (anchorBounds.right + gapPx)
+                    .coerceIn(marginPx, (windowSize.width - popupContentSize.width - marginPx).coerceAtLeast(marginPx))
+                val centeredY = (anchorBounds.top + (anchorBounds.height - popupContentSize.height) / 2)
+                    .coerceIn(marginPx, (windowSize.height - popupContentSize.height - marginPx).coerceAtLeast(marginPx))
+                return IntOffset(rightX, centeredY)
+            }
+        }
+    }
+
+    Popup(
+        popupPositionProvider = positionProvider,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true)
+    ) {
+        Box(
+            modifier = Modifier
+                .glossyMetallicSurface(
+                    shape = RoundedCornerShape(16.dp),
+                    accentColor = NeonCyan,
+                    secondaryGlow = NeonBlue,
+                    borderWidth = 1.4.dp,
+                    isHero = true
+                )
+                .testTag("reports_nav_popup_menu")
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(IntrinsicSize.Max)
+                    .padding(vertical = 4.dp)
+            ) {
+                ReportCategory.entries.forEachIndexed { index, category ->
+                    val isSelected = isReportsActive && selectedCategory == category
+                    val glowColor = reportCategoryGlowColor(category)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .minimumInteractiveComponentSize()
+                            .background(
+                                if (isSelected) NeonCyan.copy(alpha = 0.14f) else Color.Transparent
+                            )
+                            .clickable { onSelectCategory(category) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .testTag("nav_report_popup_${category.name.lowercase()}"),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        GlossyNeonIconOrb(
+                            icon = reportCategoryIcon(category),
+                            contentDescription = null,
+                            glowColor = glowColor,
+                            iconTint = Color.White,
+                            size = 24.dp,
+                            iconSize = 13.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = category.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                            color = if (isSelected) NeonCyan else GlassTextPrimary,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.weight(1f, fill = true)
+                        )
+                        if (isSelected) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = "Selected",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+                    if (index < ReportCategory.entries.lastIndex) {
+                        HorizontalDivider(
+                            thickness = 0.6.dp,
+                            color = GlassTextSecondary.copy(alpha = 0.16f),
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

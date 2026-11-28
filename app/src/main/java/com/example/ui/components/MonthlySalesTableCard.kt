@@ -60,6 +60,7 @@ fun MonthlySalesTableCard(
     headerAction: (@Composable () -> Unit)? = null,
     filterContent: (@Composable () -> Unit)? = null,
     onRowClick: ((MonthlySalesRecord) -> Unit)? = null,
+    embeddedInOuterCard: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
@@ -115,10 +116,7 @@ fun MonthlySalesTableCard(
         )
     }
 
-    GlassCardSurface(
-        modifier = modifier.testTag("monthly_sales_table_card"),
-        contentPadding = PaddingValues(vertical = 8.dp)
-    ) {
+    val tableCardBody: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit = {
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
             Row(
                 modifier = Modifier
@@ -435,6 +433,22 @@ fun MonthlySalesTableCard(
                 }
             }
         }
+    }
+
+    if (embeddedInOuterCard) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .testTag("monthly_sales_table_card"),
+            content = tableCardBody
+        )
+    } else {
+        GlassCardSurface(
+            modifier = modifier.testTag("monthly_sales_table_card"),
+            contentPadding = PaddingValues(vertical = 8.dp),
+            content = tableCardBody
+        )
     }
 }
 
