@@ -11,7 +11,6 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.NoCredentialException
-import com.example.R
 import com.example.data.CloudSyncPrefsStore
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -66,19 +65,25 @@ fun ensureFirebaseApp(context: Context): FirebaseApp? {
         .getOrNull()
 }
 
+private fun resolveStringResource(context: Context, name: String): String? {
+    val resId = context.resources.getIdentifier(name, "string", context.packageName)
+    if (resId == 0) return null
+    return runCatching { context.getString(resId) }
+        .getOrNull()
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+}
+
 private fun buildFirebaseOptionsFromStrings(context: Context): FirebaseOptions? {
-    val appId = runCatching { context.getString(R.string.google_app_id) }.getOrNull()?.trim().orEmpty()
-    val apiKey = runCatching { context.getString(R.string.google_api_key) }.getOrNull()?.trim().orEmpty()
+    val appId = resolveStringResource(context, "google_app_id").orEmpty()
+    val apiKey = resolveStringResource(context, "google_api_key").orEmpty()
     if (appId.isEmpty() || apiKey.isEmpty()) return null
     val builder = FirebaseOptions.Builder()
         .setApplicationId(appId)
         .setApiKey(apiKey)
-    runCatching { context.getString(R.string.project_id) }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-        ?.let { builder.setProjectId(it) }
-    runCatching { context.getString(R.string.gcm_defaultSenderId) }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-        ?.let { builder.setGcmSenderId(it) }
-    runCatching { context.getString(R.string.google_storage_bucket) }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-        ?.let { builder.setStorageBucket(it) }
+    resolveStringResource(context, "project_id")?.let { builder.setProjectId(it) }
+    resolveStringResource(context, "gcm_defaultSenderId")?.let { builder.setGcmSenderId(it) }
+    resolveStringResource(context, "google_storage_bucket")?.let { builder.setStorageBucket(it) }
     return builder.build()
 }
 
@@ -98,21 +103,23 @@ private fun resolveFirebaseAuthWithError(context: Context): Pair<FirebaseAuth?, 
         auth to null
     } catch (t: Throwable) {
         Log.e(AUTH_TAG, "Failed to obtain FirebaseAuth: ${t.message}", t)
-        val detail = t.localizedMessage?.trim().orEmpty()
-        val msg = if (detail.isNotEmpty()) {
-            "Cloud authentication could not start ($detail)."
+        val hasAppId = resolveStringResource(context, "google_app_id") != null
+        val msg = if (!hasAppId) {
+            "Google Sign-In is not configured in this APK build (missing google-services config)."
         } else {
-            "Cloud authentication could not initialize on this device."
+            val detail = t.localizedMessage?.trim().orEmpty()
+            if (detail.isNotEmpty()) {
+                "Cloud authentication could not start ($detail)."
+            } else {
+                "Cloud authentication could not initialize on this device."
+            }
         }
         null to msg
     }
 }
 
 private fun resolveDefaultWebClientId(context: Context): String? {
-    return runCatching { context.getString(R.string.default_web_client_id) }
-        .getOrNull()
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
+    return resolveStringResource(context, "default_web_client_id")
 }
 
 private fun buildLegacyGoogleSignInOptions(clientId: String): GoogleSignInOptions {
