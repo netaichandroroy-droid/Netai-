@@ -63,68 +63,114 @@ data class AiCallScheduleConfig(
 
 class AiCallCenterPrefsStore(context: Context) {
 
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     fun loadConfig(): AiCallScheduleConfig {
-        val voiceId = prefs.getString(KEY_VOICE_ID, FemaleAiVoiceOption.AOEDE.voiceId)
-        val voice = FemaleAiVoiceOption.entries.firstOrNull {
-            it.voiceId.equals(voiceId, ignoreCase = true)
-        } ?: FemaleAiVoiceOption.AOEDE
+        synchronized(storeLock) {
+            if (!prefs.contains(KEY_MONDAY_ENABLED) && !prefs.contains(KEY_ENABLED_DAYS)) {
+                restoreConfigFromVaultLocked()
+            }
+            val voiceId = prefs.getString(KEY_VOICE_ID, FemaleAiVoiceOption.AOEDE.voiceId)
+            val voice = FemaleAiVoiceOption.entries.firstOrNull {
+                it.voiceId.equals(voiceId, ignoreCase = true)
+            } ?: FemaleAiVoiceOption.AOEDE
 
-        val enabledDays = if (prefs.contains(KEY_ENABLED_DAYS)) {
-            val raw = prefs.getString(KEY_ENABLED_DAYS, "").orEmpty()
-            raw.split(",")
-                .mapNotNull { it.trim().toIntOrNull() }
-                .filter { it in Calendar.SUNDAY..Calendar.SATURDAY }
-                .toSet()
-        } else {
-            setOf(Calendar.MONDAY)
+            val enabledDays = if (prefs.contains(KEY_ENABLED_DAYS)) {
+                val raw = prefs.getString(KEY_ENABLED_DAYS, "").orEmpty()
+                raw.split(",")
+                    .mapNotNull { it.trim().toIntOrNull() }
+                    .filter { it in Calendar.SUNDAY..Calendar.SATURDAY }
+                    .toSet()
+            } else {
+                setOf(Calendar.MONDAY)
+            }
+
+            return AiCallScheduleConfig(
+                autoCallMondayEnabled = prefs.getBoolean(KEY_MONDAY_ENABLED, true),
+                enabledDays = enabledDays,
+                scheduledHour = prefs.getInt(KEY_SCHEDULE_HOUR, 10).coerceIn(0, 23),
+                scheduledMinute = prefs.getInt(KEY_SCHEDULE_MINUTE, 0).coerceIn(0, 59),
+                autoVoiceGreeting = prefs.getBoolean(KEY_AUTO_VOICE, true),
+                alsoDialPhoneNumber = prefs.getBoolean(KEY_ALSO_DIAL_SIM, false),
+                selectedVoice = voice
+            )
         }
+    }
 
-        return AiCallScheduleConfig(
-            autoCallMondayEnabled = prefs.getBoolean(KEY_MONDAY_ENABLED, true),
-            enabledDays = enabledDays,
-            scheduledHour = prefs.getInt(KEY_SCHEDULE_HOUR, 10).coerceIn(0, 23),
-            scheduledMinute = prefs.getInt(KEY_SCHEDULE_MINUTE, 0).coerceIn(0, 59),
-            autoVoiceGreeting = prefs.getBoolean(KEY_AUTO_VOICE, true),
-            alsoDialPhoneNumber = prefs.getBoolean(KEY_ALSO_DIAL_SIM, false),
-            selectedVoice = voice
-        )
+    private fun restoreConfigFromVaultLocked() {
+        val raw = DurableLocalVault.getSection(appContext, VAULT_CONFIG_SECTION) ?: return
+        runCatching {
+            val obj = JSONObject(raw)
+            prefs.edit()
+                .putBoolean(KEY_MONDAY_ENABLED, obj.optBoolean(KEY_MONDAY_ENABLED, true))
+                .putString(KEY_ENABLED_DAYS, obj.optString(KEY_ENABLED_DAYS, Calendar.MONDAY.toString()))
+                .putInt(KEY_SCHEDULE_HOUR, obj.optInt(KEY_SCHEDULE_HOUR, 10).coerceIn(0, 23))
+                .putInt(KEY_SCHEDULE_MINUTE, obj.optInt(KEY_SCHEDULE_MINUTE, 0).coerceIn(0, 59))
+                .putBoolean(KEY_AUTO_VOICE, obj.optBoolean(KEY_AUTO_VOICE, true))
+                .putBoolean(KEY_ALSO_DIAL_SIM, obj.optBoolean(KEY_ALSO_DIAL_SIM, false))
+                .putString(KEY_VOICE_ID, obj.optString(KEY_VOICE_ID, FemaleAiVoiceOption.AOEDE.voiceId))
+                .commit()
+        }
     }
 
     fun saveConfig(config: AiCallScheduleConfig) {
-        val serializedDays = CallScheduleDay.entries
-            .map { it.calendarDay }
-            .filter { it in config.enabledDays }
-            .joinToString(",")
-        prefs.edit()
-            .putBoolean(KEY_MONDAY_ENABLED, config.autoCallMondayEnabled)
-            .putString(KEY_ENABLED_DAYS, serializedDays)
-            .putInt(KEY_SCHEDULE_HOUR, config.scheduledHour.coerceIn(0, 23))
-            .putInt(KEY_SCHEDULE_MINUTE, config.scheduledMinute.coerceIn(0, 59))
-            .putBoolean(KEY_AUTO_VOICE, config.autoVoiceGreeting)
-            .putBoolean(KEY_ALSO_DIAL_SIM, config.alsoDialPhoneNumber)
-            .putString(KEY_VOICE_ID, config.selectedVoice.voiceId)
-            .apply()
+        synchronized(storeLock) {
+            val serializedDays = CallScheduleDay.entries
+                .map { it.calendarDay }
+                .filter { it in config.enabledDays }
+                .joinToString(",")
+            val hour = config.scheduledHour.coerceIn(0, 23)
+            val minute = config.scheduledMinute.coerceIn(0, 59)
+            prefs.edit()
+                .putBoolean(KEY_MONDAY_ENABLED, config.autoCallMondayEnabled)
+                .putString(KEY_ENABLED_DAYS, serializedDays)
+                .putInt(KEY_SCHEDULE_HOUR, hour)
+                .putInt(KEY_SCHEDULE_MINUTE, minute)
+                .putBoolean(KEY_AUTO_VOICE, config.autoVoiceGreeting)
+                .putBoolean(KEY_ALSO_DIAL_SIM, config.alsoDialPhoneNumber)
+                .putString(KEY_VOICE_ID, config.selectedVoice.voiceId)
+                .commit()
+            val payload = JSONObject().apply {
+                put(KEY_MONDAY_ENABLED, config.autoCallMondayEnabled)
+                put(KEY_ENABLED_DAYS, serializedDays)
+                put(KEY_SCHEDULE_HOUR, hour)
+                put(KEY_SCHEDULE_MINUTE, minute)
+                put(KEY_AUTO_VOICE, config.autoVoiceGreeting)
+                put(KEY_ALSO_DIAL_SIM, config.alsoDialPhoneNumber)
+                put(KEY_VOICE_ID, config.selectedVoice.voiceId)
+            }.toString()
+            DurableLocalVault.putSection(appContext, VAULT_CONFIG_SECTION, payload)
+        }
     }
 
-    fun getLastRunMondayKey(): String = prefs.getString(KEY_LAST_RUN_MONDAY, "").orEmpty()
+    fun getLastRunMondayKey(): String = synchronized(storeLock) {
+        prefs.getString(KEY_LAST_RUN_MONDAY, "").orEmpty()
+    }
 
     fun setLastRunMondayKey(key: String) {
-        prefs.edit().putString(KEY_LAST_RUN_MONDAY, key).apply()
+        synchronized(storeLock) {
+            prefs.edit().putString(KEY_LAST_RUN_MONDAY, key).commit()
+        }
     }
 
-    fun getPendingAutoStartMondayKey(): String = prefs.getString(KEY_PENDING_AUTO_START_MONDAY, "").orEmpty()
+    fun getPendingAutoStartMondayKey(): String = synchronized(storeLock) {
+        prefs.getString(KEY_PENDING_AUTO_START_MONDAY, "").orEmpty()
+    }
 
     fun setPendingAutoStartMondayKey(key: String) {
-        prefs.edit().putString(KEY_PENDING_AUTO_START_MONDAY, key).apply()
+        synchronized(storeLock) {
+            prefs.edit().putString(KEY_PENDING_AUTO_START_MONDAY, key).commit()
+        }
     }
 
     fun clearRunMarkersForUpdatedSchedule() {
-        prefs.edit()
-            .putString(KEY_LAST_RUN_MONDAY, "")
-            .putString(KEY_PENDING_AUTO_START_MONDAY, "")
-            .apply()
+        synchronized(storeLock) {
+            prefs.edit()
+                .putString(KEY_LAST_RUN_MONDAY, "")
+                .putString(KEY_PENDING_AUTO_START_MONDAY, "")
+                .commit()
+        }
     }
 
     fun isScheduledMondayAutoStartDue(nowMs: Long = System.currentTimeMillis()): Boolean {
@@ -144,13 +190,34 @@ class AiCallCenterPrefsStore(context: Context) {
     }
 
     fun loadCallRecordsForCurrentCycle(nowMs: Long = System.currentTimeMillis()): Map<String, AiCallRecord> {
+        synchronized(storeLock) {
+            return loadCallRecordsForCurrentCycleLocked(nowMs)
+        }
+    }
+
+    private fun loadCallRecordsForCurrentCycleLocked(nowMs: Long): Map<String, AiCallRecord> {
         val activeCycle = currentCycleKey(nowMs)
-        val storedCycle = prefs.getString(KEY_RECORDS_CYCLE, "").orEmpty()
-        if (storedCycle != activeCycle) {
+        var storedCycle = prefs.getString(KEY_RECORDS_CYCLE, "").orEmpty()
+        var raw = prefs.getString(KEY_RECORDS_JSON, "").orEmpty()
+        if (storedCycle.isBlank() && raw.isBlank()) {
+            val vaultRaw = DurableLocalVault.getSection(appContext, VAULT_RECORDS_SECTION)
+            if (!vaultRaw.isNullOrBlank()) {
+                runCatching {
+                    val obj = JSONObject(vaultRaw)
+                    storedCycle = obj.optString(KEY_RECORDS_CYCLE, "")
+                    raw = obj.optString(KEY_RECORDS_JSON, "")
+                    if (storedCycle.isNotBlank()) {
+                        prefs.edit()
+                            .putString(KEY_RECORDS_CYCLE, storedCycle)
+                            .putString(KEY_RECORDS_JSON, raw)
+                            .commit()
+                    }
+                }
+            }
+        }
+        if (storedCycle != activeCycle || raw.isBlank()) {
             return emptyMap()
         }
-        val raw = prefs.getString(KEY_RECORDS_JSON, "").orEmpty()
-        if (raw.isBlank()) return emptyMap()
         return runCatching {
             val array = JSONArray(raw)
             val result = linkedMapOf<String, AiCallRecord>()
@@ -176,17 +243,21 @@ class AiCallCenterPrefsStore(context: Context) {
         record: AiCallRecord,
         nowMs: Long = System.currentTimeMillis()
     ) {
-        val activeCycle = currentCycleKey(nowMs)
-        val current = loadCallRecordsForCurrentCycle(nowMs).toMutableMap()
-        current[record.memberId] = record
-        saveCycleRecords(activeCycle, current.values.toList())
+        synchronized(storeLock) {
+            val activeCycle = currentCycleKey(nowMs)
+            val current = loadCallRecordsForCurrentCycleLocked(nowMs).toMutableMap()
+            current[record.memberId] = record
+            saveCycleRecordsLocked(activeCycle, current.values.toList())
+        }
     }
 
     fun clearCycleRecords(nowMs: Long = System.currentTimeMillis()) {
-        saveCycleRecords(currentCycleKey(nowMs), emptyList())
+        synchronized(storeLock) {
+            saveCycleRecordsLocked(currentCycleKey(nowMs), emptyList())
+        }
     }
 
-    private fun saveCycleRecords(cycleKey: String, records: List<AiCallRecord>) {
+    private fun saveCycleRecordsLocked(cycleKey: String, records: List<AiCallRecord>) {
         val array = JSONArray()
         records.forEach { rec ->
             array.put(
@@ -201,14 +272,23 @@ class AiCallCenterPrefsStore(context: Context) {
                 }
             )
         }
+        val recordsJson = array.toString()
         prefs.edit()
             .putString(KEY_RECORDS_CYCLE, cycleKey)
-            .putString(KEY_RECORDS_JSON, array.toString())
-            .apply()
+            .putString(KEY_RECORDS_JSON, recordsJson)
+            .commit()
+        val vaultPayload = JSONObject().apply {
+            put(KEY_RECORDS_CYCLE, cycleKey)
+            put(KEY_RECORDS_JSON, recordsJson)
+        }.toString()
+        DurableLocalVault.putSection(appContext, VAULT_RECORDS_SECTION, vaultPayload)
     }
 
     companion object {
+        private val storeLock = Any()
         private const val PREFS_NAME = "ai_call_center_prefs"
+        private const val VAULT_CONFIG_SECTION = "ai_call_center_config_json"
+        private const val VAULT_RECORDS_SECTION = "ai_call_center_records_json"
         private const val KEY_MONDAY_ENABLED = "monday_auto_call_enabled"
         private const val KEY_ENABLED_DAYS = "enabled_call_days_csv"
         private const val KEY_SCHEDULE_HOUR = "monday_schedule_hour"

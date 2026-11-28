@@ -177,14 +177,33 @@ fun CloudAutoSyncCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 if (cloudSyncState.isConnected) {
-                    Text(
-                        text = if (cloudSyncState.lastSyncedAtMs > 0L) {
+                    val syncStatusText = when {
+                        cloudSyncState.isSyncing -> "Syncing changes to cloud..."
+                        cloudSyncState.pendingMutationsCount > 0 -> {
+                            "${cloudSyncState.pendingMutationsCount} change(s) saved locally • waiting to sync"
+                        }
+                        cloudSyncState.isFromCache && cloudSyncState.lastSyncedAtMs > 0L -> {
+                            "Offline cache • Last synced: ${formatCloudSyncTime(cloudSyncState.lastSyncedAtMs)}"
+                        }
+                        cloudSyncState.lastSyncedAtMs > 0L -> {
                             "Last synced: ${formatCloudSyncTime(cloudSyncState.lastSyncedAtMs)}"
-                        } else {
-                            "Ready to sync"
-                        },
+                        }
+                        else -> "Ready to sync"
+                    }
+                    Text(
+                        text = syncStatusText,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (cloudSyncState.pendingMutationsCount > 0) {
+                            NeonCyan
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                } else if (cloudSyncState.pendingMutationsCount > 0) {
+                    Text(
+                        text = "${cloudSyncState.pendingMutationsCount} change(s) saved on device • sign in to sync",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NeonCyan
                     )
                 }
             }

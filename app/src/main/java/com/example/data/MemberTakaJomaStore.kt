@@ -17,6 +17,12 @@ class MemberTakaJomaStore(context: Context) {
     )
 
     fun loadAll(): List<MemberTakaJoma> {
+        synchronized(storeLock) {
+            return loadAllLocked()
+        }
+    }
+
+    private fun loadAllLocked(): List<MemberTakaJoma> {
         val rawFromPrefs = if (prefs.contains(KEY_SUBMISSIONS)) prefs.getString(KEY_SUBMISSIONS, null) else null
         val parsedFromPrefs = rawFromPrefs?.let { parseSubmissionsJson(it) }
         if (parsedFromPrefs != null) {
@@ -76,6 +82,30 @@ class MemberTakaJomaStore(context: Context) {
     }
 
     fun saveAll(submissions: List<MemberTakaJoma>) {
+        saveAllVerified(submissions)
+    }
+
+    fun saveAllVerified(submissions: List<MemberTakaJoma>): Boolean {
+        synchronized(storeLock) {
+            return saveAllLocked(submissions)
+        }
+    }
+
+    fun updateAtomic(
+        transform: (List<MemberTakaJoma>) -> List<MemberTakaJoma>
+    ): Result<List<MemberTakaJoma>> {
+        synchronized(storeLock) {
+            val current = loadAllLocked()
+            val updated = sortSubmissions(transform(current))
+            return if (saveAllLocked(updated)) {
+                Result.success(updated)
+            } else {
+                Result.failure(IllegalStateException("Could not save deposit records to device storage."))
+            }
+        }
+    }
+
+    private fun saveAllLocked(submissions: List<MemberTakaJoma>): Boolean {
         val sorted = sortSubmissions(submissions)
         val array = JSONArray()
         for (item in sorted) {
@@ -101,10 +131,9 @@ class MemberTakaJomaStore(context: Context) {
             array.put(obj)
         }
         val json = array.toString()
-        prefs.edit(commit = true) {
-            putString(KEY_SUBMISSIONS, json)
-        }
-        DurableLocalVault.putSection(appContext, VAULT_SECTION, json)
+        val prefsOk = prefs.edit().putString(KEY_SUBMISSIONS, json).commit()
+        val vaultOk = DurableLocalVault.putSection(appContext, VAULT_SECTION, json)
+        return prefsOk || vaultOk
     }
 
     fun isDuplicateSlip(slipHash: String, photoPath: String = ""): Boolean {
@@ -118,26 +147,32 @@ class MemberTakaJomaStore(context: Context) {
     }
 
     fun tryAddSubmission(entry: MemberTakaJoma): Result<List<MemberTakaJoma>> {
-        val current = loadAll()
-        if (current.any { it.id == entry.id }) {
-            return Result.failure(
-                IllegalStateException("This deposit entry is already saved.")
-            )
+        synchronized(storeLock) {
+            val current = loadAllLocked()
+            if (current.any { it.id == entry.id }) {
+                return Result.failure(
+                    IllegalStateException("This deposit entry is already saved.")
+                )
+            }
+            val cleanHash = entry.slipHash.trim()
+            val cleanPath = entry.photoPath.trim()
+            val hasDuplicateSlip = current.any { existing ->
+                (cleanHash.isNotEmpty() && existing.slipHash.equals(cleanHash, ignoreCase = true)) ||
+                    (cleanPath.isNotEmpty() && existing.photoPath == cleanPath)
+            }
+            if (hasDuplicateSlip) {
+                return Result.failure(
+                    IllegalStateException("This slip has already been submitted. Duplicate slips are not allowed.")
+                )
+            }
+            val updated = sortSubmissions(listOf(entry) + current)
+            if (!saveAllLocked(updated)) {
+                return Result.failure(
+                    IllegalStateException("Could not save deposit entry to device storage.")
+                )
+            }
+            return Result.success(updated)
         }
-        val cleanHash = entry.slipHash.trim()
-        val cleanPath = entry.photoPath.trim()
-        val hasDuplicateSlip = current.any { existing ->
-            (cleanHash.isNotEmpty() && existing.slipHash.equals(cleanHash, ignoreCase = true)) ||
-                (cleanPath.isNotEmpty() && existing.photoPath == cleanPath)
-        }
-        if (hasDuplicateSlip) {
-            return Result.failure(
-                IllegalStateException("This slip has already been submitted. Duplicate slips are not allowed.")
-            )
-        }
-        val updated = sortSubmissions(listOf(entry) + current)
-        saveAll(updated)
-        return Result.success(updated)
     }
 
     fun addSubmission(entry: MemberTakaJoma): List<MemberTakaJoma> {
@@ -149,40 +184,44 @@ class MemberTakaJomaStore(context: Context) {
         status: TakaJomaStatus,
         reviewedAtMs: Long = System.currentTimeMillis()
     ): List<MemberTakaJoma> {
-        val current = loadAll()
-        var changed = false
-        val updated = current.map { item ->
-            if (item.id == submissionId) {
-                changed = true
-                item.copy(
-                    approvalStatus = status.wireValue,
-                    reviewedAtMs = reviewedAtMs
-                )
-            } else {
-                item
+        synchronized(storeLock) {
+            val current = loadAllLocked()
+            var changed = false
+            val updated = current.map { item ->
+                if (item.id == submissionId) {
+                    changed = true
+                    item.copy(
+                        approvalStatus = status.wireValue,
+                        reviewedAtMs = reviewedAtMs
+                    )
+                } else {
+                    item
+                }
             }
+            if (changed) {
+                saveAllLocked(updated)
+            }
+            return sortSubmissions(updated)
         }
-        if (changed) {
-            saveAll(updated)
-        }
-        return sortSubmissions(updated)
     }
 
     fun deleteSubmission(
         submissionId: String,
         requesterMemberId: String? = null
     ): List<MemberTakaJoma> {
-        val current = loadAll()
-        val updated = current.filterNot { item ->
-            item.id == submissionId && (requesterMemberId == null || item.memberId == requesterMemberId)
-        }
-        if (updated.size != current.size) {
-            saveAll(updated)
-        }
-        return if (requesterMemberId != null) {
-            updated.filter { it.memberId == requesterMemberId }
-        } else {
-            updated
+        synchronized(storeLock) {
+            val current = loadAllLocked()
+            val updated = current.filterNot { item ->
+                item.id == submissionId && (requesterMemberId == null || item.memberId == requesterMemberId)
+            }
+            if (updated.size != current.size) {
+                saveAllLocked(updated)
+            }
+            return if (requesterMemberId != null) {
+                updated.filter { it.memberId == requesterMemberId }
+            } else {
+                updated
+            }
         }
     }
 
@@ -194,6 +233,7 @@ class MemberTakaJomaStore(context: Context) {
     }
 
     companion object {
+        private val storeLock = Any()
         private const val PREFS_NAME = "hisab_member_taka_joma_prefs"
         private const val KEY_SUBMISSIONS = "submissions_json"
         private const val VAULT_SECTION = "taka_joma_json"

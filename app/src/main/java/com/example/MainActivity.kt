@@ -380,7 +380,7 @@ fun AppContent(
 
             AppSession.Admin -> {
                 val adminSyncOwnerKey = uid.ifBlank { "local" }
-                key(adminSyncOwnerKey) {
+                key("admin") {
                     HisabMainApp(
                         credentialStore = credentialStore,
                         onAppLogout = {
@@ -416,7 +416,7 @@ fun AppContent(
                     }
                 } else {
                     val memberSyncOwnerKey = uid.ifBlank { "local" }
-                    key("${session.memberId}_$memberSyncOwnerKey") {
+                    key("member_${session.memberId}") {
                         MemberMainApp(
                             initialMember = member,
                             credentialStore = credentialStore,

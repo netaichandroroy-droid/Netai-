@@ -53,17 +53,20 @@ data class CloudSyncUiState(
     val accountName: String = "",
     val isSyncing: Boolean = false,
     val lastSyncedAtMs: Long = 0L,
+    val pendingMutationsCount: Int = 0,
+    val isFromCache: Boolean = false,
     val errorMessage: String? = null
 )
 
 class CloudAutoSyncRepository(
     context: Context,
-    private val db: FirebaseFirestore = FirebaseFirestore.getInstance(
-        context.applicationContext.getString(R.string.firestore_database_id)
-    )
+    private val db: FirebaseFirestore = resolveFirestore(context)
 ) {
     private val appContext = context.applicationContext
-    private val auth = Firebase.auth
+    private val auth = run {
+        ensureFirebaseInitialized(appContext)
+        Firebase.auth
+    }
     private val syncPrefs = CloudSyncPrefsStore(appContext)
     private val localTxStore = LocalTransactionStore(appContext)
     private val memberStore = MemberStore(appContext)
@@ -88,7 +91,8 @@ class CloudAutoSyncRepository(
             isConnected = auth.currentUser != null,
             accountEmail = auth.currentUser?.email.orEmpty(),
             accountName = auth.currentUser?.displayName.orEmpty(),
-            lastSyncedAtMs = syncPrefs.getLastSyncedAtMs()
+            lastSyncedAtMs = syncPrefs.getLastSyncedAtMs(),
+            pendingMutationsCount = syncPrefs.getPendingMutationCount()
         )
     )
     val syncState: StateFlow<CloudSyncUiState> = _syncState.asStateFlow()
@@ -111,8 +115,15 @@ class CloudAutoSyncRepository(
             it.copy(
                 isConnected = user != null,
                 accountEmail = user?.email.orEmpty(),
-                accountName = user?.displayName.orEmpty()
+                accountName = user?.displayName.orEmpty(),
+                pendingMutationsCount = syncPrefs.getPendingMutationCount()
             )
+        }
+    }
+
+    fun refreshPendingState() {
+        _syncState.update {
+            it.copy(pendingMutationsCount = syncPrefs.getPendingMutationCount())
         }
     }
 
@@ -202,12 +213,17 @@ class CloudAutoSyncRepository(
         if (!syncPrefs.isSeededForUid(uid)) {
             pushMissingLocalRecords(uid, overwriteExisting = false)
             syncPrefs.markSeededForUid(uid)
-            markSyncedNow()
+            markSyncedIfClean()
         } else if (syncPrefs.hasPendingMutations()) {
             flushPendingMutations(uid)
-            markSyncedNow()
+            markSyncedIfClean()
         } else {
-            _syncState.update { it.copy(isSyncing = false) }
+            _syncState.update {
+                it.copy(
+                    isSyncing = false,
+                    pendingMutationsCount = syncPrefs.getPendingMutationCount()
+                )
+            }
         }
     }
 
@@ -462,8 +478,10 @@ class CloudAutoSyncRepository(
                 if (!isFromCache) {
                     syncPrefs.replaceConfirmedServerIds(uid, COL_TRANSACTIONS, remoteIds)
                     triggerPendingFlushIfNeeded(uid)
+                    markSyncedIfClean()
+                } else {
+                    markCacheSnapshotReceived()
                 }
-                markSyncedNow()
                 _remoteUpdates.tryEmit(Unit)
             }
     }
@@ -509,8 +527,10 @@ class CloudAutoSyncRepository(
                 if (!isFromCache) {
                     syncPrefs.replaceConfirmedServerIds(uid, COL_MEMBERS, remoteIds)
                     triggerPendingFlushIfNeeded(uid)
+                    markSyncedIfClean()
+                } else {
+                    markCacheSnapshotReceived()
                 }
-                markSyncedNow()
                 _remoteUpdates.tryEmit(Unit)
             }
     }
@@ -556,8 +576,10 @@ class CloudAutoSyncRepository(
                 if (!isFromCache) {
                     syncPrefs.replaceConfirmedServerIds(uid, COL_TAKA_JOMA, remoteIds)
                     triggerPendingFlushIfNeeded(uid)
+                    markSyncedIfClean()
+                } else {
+                    markCacheSnapshotReceived()
                 }
-                markSyncedNow()
                 _remoteUpdates.tryEmit(Unit)
             }
     }
@@ -602,8 +624,10 @@ class CloudAutoSyncRepository(
                 if (!isFromCache) {
                     syncPrefs.replaceConfirmedServerIds(uid, COL_MONTHLY_SALES, remoteIds)
                     triggerPendingFlushIfNeeded(uid)
+                    markSyncedIfClean()
+                } else {
+                    markCacheSnapshotReceived()
                 }
-                markSyncedNow()
                 _remoteUpdates.tryEmit(Unit)
             }
     }
@@ -619,6 +643,7 @@ class CloudAutoSyncRepository(
                 if (snapshot.metadata.isFromCache && snapshot.isEmpty) {
                     return@collect
                 }
+                val isFromCache = snapshot.metadata.isFromCache
                 val pendingConfigUpserts = syncPrefs.getPendingUpserts(COL_APP_CONFIG)
                 var changed = false
                 synchronized(localWriteLock) {
@@ -682,11 +707,15 @@ class CloudAutoSyncRepository(
                         }
                     }
                 }
-                if (!snapshot.metadata.isFromCache) {
+                if (!isFromCache) {
                     triggerPendingFlushIfNeeded(uid)
+                    if (changed) {
+                        markSyncedIfClean()
+                    }
+                } else {
+                    markCacheSnapshotReceived()
                 }
                 if (changed) {
-                    markSyncedNow()
                     _remoteUpdates.tryEmit(Unit)
                 }
             }
@@ -711,13 +740,42 @@ class CloudAutoSyncRepository(
         }
     }
 
+    private fun markCacheSnapshotReceived() {
+        val pendingCount = syncPrefs.getPendingMutationCount()
+        _syncState.update {
+            it.copy(
+                isSyncing = false,
+                isFromCache = true,
+                pendingMutationsCount = pendingCount
+            )
+        }
+    }
+
+    private fun markSyncedIfClean() {
+        val pendingCount = syncPrefs.getPendingMutationCount()
+        if (pendingCount > 0) {
+            _syncState.update {
+                it.copy(
+                    isSyncing = false,
+                    isFromCache = false,
+                    pendingMutationsCount = pendingCount
+                )
+            }
+        } else {
+            markSyncedNow()
+        }
+    }
+
     private fun markSyncedNow() {
         val now = System.currentTimeMillis()
+        val pendingCount = syncPrefs.getPendingMutationCount()
         syncPrefs.setLastSyncedAtMs(now)
         _syncState.update {
             it.copy(
                 isSyncing = false,
                 lastSyncedAtMs = now,
+                pendingMutationsCount = pendingCount,
+                isFromCache = false,
                 errorMessage = null
             )
         }
@@ -884,7 +942,12 @@ class CloudAutoSyncRepository(
     suspend fun syncOnlinePaymentConfig(config: OnlinePaymentConfig): Result<Unit> = withContext(Dispatchers.IO) {
         val uid = auth.currentUser?.uid
             ?: return@withContext Result.failure(IllegalStateException("Google Sign-In is not active."))
-        val accountsJson = serializeAccountsJson(config.accounts).take(10000)
+        val accountsJson = serializeAccountsJson(config.accounts)
+        if (accountsJson.length > 10000) {
+            return@withContext Result.failure(
+                IllegalArgumentException("Online payment configuration exceeds cloud size limit.")
+            )
+        }
         val updateMap = mapOf(
             "onlinePaymentEnabled" to config.isOnlinePaymentEnabled,
             "accountsJson" to accountsJson,
@@ -972,6 +1035,7 @@ class CloudAutoSyncRepository(
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/$collectionName/$docId"
         var isUpdate = false
         syncPrefs.markPendingUpsert(collectionName, docId)
+        refreshPendingState()
         return try {
             val uid = requireUserId()
             val docRef = db.collection("users").document(uid).collection(collectionName).document(docId)
@@ -1006,7 +1070,7 @@ class CloudAutoSyncRepository(
             knownDocIds.add(key)
             syncPrefs.addConfirmedServerIds(uid, collectionName, listOf(docId))
             syncPrefs.clearPendingUpsert(collectionName, docId)
-            markSyncedNow()
+            markSyncedIfClean()
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -1017,7 +1081,10 @@ class CloudAutoSyncRepository(
                 docPath
             )
             _syncState.update {
-                it.copy(errorMessage = e.localizedMessage ?: "Cloud sync failed")
+                it.copy(
+                    pendingMutationsCount = syncPrefs.getPendingMutationCount(),
+                    errorMessage = e.localizedMessage ?: "Cloud sync failed"
+                )
             }
             Result.failure(e)
         }
@@ -1026,6 +1093,7 @@ class CloudAutoSyncRepository(
     private suspend fun deleteDoc(collectionName: String, docId: String): Result<Unit> {
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/$collectionName/$docId"
         syncPrefs.markPendingDelete(collectionName, docId)
+        refreshPendingState()
         return try {
             val uid = requireUserId()
             val docRef = db.collection("users").document(uid).collection(collectionName).document(docId)
@@ -1034,14 +1102,17 @@ class CloudAutoSyncRepository(
             knownDocIds.remove("$collectionName/$docId")
             syncPrefs.removeConfirmedServerId(uid, collectionName, docId)
             syncPrefs.clearPendingDelete(collectionName, docId)
-            markSyncedNow()
+            markSyncedIfClean()
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.DELETE, docPath)
             _syncState.update {
-                it.copy(errorMessage = e.localizedMessage ?: "Failed to delete from cloud")
+                it.copy(
+                    pendingMutationsCount = syncPrefs.getPendingMutationCount(),
+                    errorMessage = e.localizedMessage ?: "Failed to delete from cloud"
+                )
             }
             Result.failure(e)
         }
@@ -1199,6 +1270,23 @@ class CloudAutoSyncRepository(
         private val YEAR_MONTH_REGEX = Regex("^[0-9]{4}-[0-9]{2}$")
         private val LOGIN_ID_REGEX = Regex("^[a-zA-Z0-9_.-]{3,30}$")
         private val PBKDF2_REGEX = Regex("^pbkdf2_sha256\\$[0-9]+\\$[A-Za-z0-9+/=]+\\$[A-Za-z0-9+/=]+$")
+
+        private fun ensureFirebaseInitialized(context: Context) {
+            runCatching {
+                val appCtx = context.applicationContext
+                if (com.google.firebase.FirebaseApp.getApps(appCtx).isEmpty()) {
+                    com.google.firebase.FirebaseApp.initializeApp(appCtx)
+                }
+            }
+        }
+
+        private fun resolveFirestore(context: Context): FirebaseFirestore {
+            val appCtx = context.applicationContext
+            ensureFirebaseInitialized(appCtx)
+            return FirebaseFirestore.getInstance(
+                appCtx.getString(R.string.firestore_database_id)
+            )
+        }
 
         fun sanitizeId(rawId: String): String {
             val cleaned = rawId.trim().replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(128)

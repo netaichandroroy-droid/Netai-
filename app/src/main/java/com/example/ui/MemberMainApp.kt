@@ -115,15 +115,13 @@ fun MemberMainApp(
     val context = LocalContext.current
     val localStore = remember(context) { LocalTransactionStore(context) }
     val memberStore = remember(context) { MemberStore(context) }
-    val onlinePaymentStore = remember(context, initialMember.id) {
-        OnlinePaymentStore(context, ownerScope = "member_${initialMember.id}")
-    }
+    val onlinePaymentStore = remember(context) { OnlinePaymentStore(context) }
     val takaJomaStore = remember(context) { MemberTakaJomaStore(context) }
     val monthlySalesStore = remember(context) { MonthlySalesStore(context) }
     val cloudSyncPrefs = remember(context) { CloudSyncPrefsStore(context) }
     val driveBackupStore = remember(context) { GoogleDriveBackupStore(context) }
     val viewModel: LocalHisabViewModel = viewModel(
-        key = "member_hisab_${syncOwnerUid}_${initialMember.id}",
+        key = "member_hisab_${initialMember.id}",
         factory = viewModelFactory {
             initializer {
                 LocalHisabViewModel(
@@ -141,6 +139,10 @@ fun MemberMainApp(
             }
         }
     )
+
+    LaunchedEffect(cloudSyncRepository) {
+        viewModel.attachCloudSyncRepository(cloudSyncRepository)
+    }
 
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val onlinePaymentConfig by viewModel.onlinePaymentConfig.collectAsStateWithLifecycle()
@@ -285,7 +287,9 @@ fun MemberMainApp(
                             currentMember = activeMember,
                             isAdminMode = false,
                             onSubmit = viewModel::submitMemberTakaJoma,
-                            onDeleteSubmission = { /* Members cannot delete */ }
+                            onDeleteSubmission = { /* Members cannot delete */ },
+                            externalSaveError = controls.lastSaveError,
+                            isSaving = controls.isSaving
                         )
 
                         MemberTab.PAYMENT -> OnlinePaymentScreen(
@@ -295,7 +299,9 @@ fun MemberMainApp(
                             onUpdateAccount = { _, _, _, _ -> },
                             onRecordPaymentTransaction = viewModel::recordOnlinePaymentTransaction,
                             onShowMessage = viewModel::showMessage,
-                            isAdminEditable = false
+                            isAdminEditable = false,
+                            isSaving = controls.isSaving,
+                            externalSaveError = controls.lastSaveError
                         )
 
                         MemberTab.PROFILE -> MemberProfileScreen(
@@ -329,7 +335,8 @@ fun MemberMainApp(
             editingTransaction = null,
             initialType = modalInitialType,
             isSaving = controls.isSaving,
-            onDismiss = { showModal = false },
+            externalSaveError = controls.lastSaveError,
+            onDismiss = { if (!controls.isSaving) showModal = false },
             onSave = { _, type, amount, category, note, date, account ->
                 viewModel.saveTransaction(null, type, amount, category, note, date, account) { ok ->
                     if (ok) showModal = false

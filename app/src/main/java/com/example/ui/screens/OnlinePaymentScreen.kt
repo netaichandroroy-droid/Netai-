@@ -89,9 +89,12 @@ fun OnlinePaymentScreen(
     onRecordPaymentTransaction: (PaymentChannel, TxType, Double, String, (Boolean) -> Unit) -> Unit,
     onShowMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
-    isAdminEditable: Boolean = true
+    isAdminEditable: Boolean = true,
+    isSaving: Boolean = false,
+    externalSaveError: String? = null
 ) {
     val context = LocalContext.current
+    val latestExternalSaveError by androidx.compose.runtime.rememberUpdatedState(externalSaveError)
     val activeBg = IncomeSurface
     val activeFg = IncomeEmerald
 
@@ -412,9 +415,14 @@ fun OnlinePaymentScreen(
                                 if (ok) {
                                     paymentAmount = ""
                                     paymentNote = ""
+                                    formError = null
+                                } else {
+                                    formError = latestExternalSaveError?.takeIf { it.isNotBlank() }
+                                        ?: "Could not save transaction. Please try again."
                                 }
                             }
                         },
+                        enabled = !isSaving,
                         shape = RoundedCornerShape(14.dp),
                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                             containerColor = BrandHeroStart,
@@ -426,7 +434,10 @@ fun OnlinePaymentScreen(
                             .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 14.dp)
                             .testTag("record_online_payment_button")
                     ) {
-                        Text("Save Transaction", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (isSaving) "Saving..." else "Save Transaction",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

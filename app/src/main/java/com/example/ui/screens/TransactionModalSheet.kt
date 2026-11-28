@@ -42,6 +42,7 @@ fun TransactionModalSheet(
     editingTransaction: HisabTransaction?,
     initialType: TxType,
     isSaving: Boolean,
+    externalSaveError: String? = null,
     onDismiss: () -> Unit,
     onSave: (
         editingId: String?,
@@ -81,6 +82,7 @@ fun TransactionModalSheet(
         mutableStateOf(editingTransaction?.resolvedAccount ?: AccountType.CASH)
     }
     var validationError by remember { mutableStateOf<String?>(null) }
+    var didAttemptSave by remember(editingTransaction, initialType) { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = { if (!isSaving) onDismiss() },
@@ -123,6 +125,7 @@ fun TransactionModalSheet(
                 onAmountChange = {
                     amountText = it
                     validationError = null
+                    didAttemptSave = false
                 },
                 selectedCategory = selectedCategory,
                 onCategoryChange = { selectedCategory = it },
@@ -132,7 +135,7 @@ fun TransactionModalSheet(
                 onDateChange = { dateIso = it },
                 selectedAccount = selectedAccount,
                 onAccountChange = { selectedAccount = it },
-                validationError = validationError,
+                validationError = validationError ?: if (didAttemptSave) externalSaveError else null,
                 isSaving = isSaving,
                 submitLabel = stringResource(R.string.save_transaction),
                 tagPrefix = "modal",
@@ -142,6 +145,7 @@ fun TransactionModalSheet(
                         validationError = "Please enter a valid amount."
                         return@TransactionFormFields
                     }
+                    didAttemptSave = true
                     onSave(
                         editingTransaction?.id,
                         selectedType,

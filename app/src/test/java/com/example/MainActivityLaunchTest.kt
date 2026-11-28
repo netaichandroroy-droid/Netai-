@@ -16,6 +16,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import com.example.auth.AppLockCredentialStore
 import com.example.auth.PasswordHasher
+import com.example.data.AppUpdatePrefsStore
 import com.example.data.LocalTransactionStore
 import com.example.data.MemberStore
 import com.example.data.MemberTakaJomaStore
@@ -46,6 +47,7 @@ class MainActivityLaunchTest {
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
         AppLockCredentialStore(context).logout()
+        AppUpdatePrefsStore(context).setAutoUpdateEnabled(false)
     }
 
     @Test

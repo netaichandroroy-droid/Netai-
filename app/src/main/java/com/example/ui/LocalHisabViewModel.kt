@@ -92,6 +92,7 @@ data class HisabUiControls(
     val reportMonth: String = BanglaFormatters.currentYearMonth(),
     val salesMonth: String = BanglaFormatters.currentYearMonth(),
     val isSaving: Boolean = false,
+    val lastSaveError: String? = null,
     val snackbarMessage: String? = null,
     val feedbackSequence: Long = 0L
 )
@@ -236,8 +237,17 @@ class LocalHisabViewModel(
     private val _aiCallCenterState = MutableStateFlow(AiCallCenterUiState())
     val aiCallCenterState: StateFlow<AiCallCenterUiState> = _aiCallCenterState.asStateFlow()
 
-    val cloudSyncState: StateFlow<CloudSyncUiState> = cloudSyncRepository?.syncState
-        ?: MutableStateFlow(CloudSyncUiState()).asStateFlow()
+    @Volatile
+    private var activeCloudRepo: CloudAutoSyncRepository? = cloudSyncRepository
+    private val _cloudSyncState = MutableStateFlow(
+        cloudSyncRepository?.syncState?.value ?: CloudSyncUiState(
+            autoSyncEnabled = cloudSyncPrefs?.isAutoSyncEnabled() ?: true,
+            pendingMutationsCount = cloudSyncPrefs?.getPendingMutationCount() ?: 0
+        )
+    )
+    val cloudSyncState: StateFlow<CloudSyncUiState> = _cloudSyncState.asStateFlow()
+    private var syncStateCollectJob: Job? = null
+    private var remoteUpdatesCollectJob: Job? = null
 
     private var lastSyncedDataSignature: String = ""
     private var lastAutoBackupTriggeredSignature: String = ""
@@ -250,16 +260,43 @@ class LocalHisabViewModel(
         lastSyncedDataSignature = computeDomainSignature()
         refreshAiCallCenterQueue()
         maybeQueuePendingAutoBackup()
-        cloudSyncRepository?.let { repo ->
-            viewModelScope.launch {
-                repo.remoteUpdates.collect {
-                    val beforeSig = lastSyncedDataSignature
-                    refreshSharedData()
-                    val afterSig = computeDomainSignature()
-                    if (afterSig != beforeSig) {
-                        lastSyncedDataSignature = afterSig
-                        notifyAdminDataChanged()
-                    }
+        attachCloudSyncRepository(cloudSyncRepository)
+    }
+
+    fun attachCloudSyncRepository(repo: CloudAutoSyncRepository?) {
+        val sameInstance = repo === activeCloudRepo
+        activeCloudRepo = repo
+        if (repo == null) {
+            syncStateCollectJob?.cancel()
+            remoteUpdatesCollectJob?.cancel()
+            syncStateCollectJob = null
+            remoteUpdatesCollectJob = null
+            _cloudSyncState.value = CloudSyncUiState(
+                autoSyncEnabled = cloudSyncPrefs?.isAutoSyncEnabled() ?: true,
+                pendingMutationsCount = cloudSyncPrefs?.getPendingMutationCount() ?: 0
+            )
+            return
+        }
+        repo.refreshAuthMetadata()
+        _cloudSyncState.value = repo.syncState.value
+        if (sameInstance && syncStateCollectJob?.isActive == true && remoteUpdatesCollectJob?.isActive == true) {
+            return
+        }
+        syncStateCollectJob?.cancel()
+        remoteUpdatesCollectJob?.cancel()
+        syncStateCollectJob = viewModelScope.launch {
+            repo.syncState.collect { state ->
+                _cloudSyncState.value = state
+            }
+        }
+        remoteUpdatesCollectJob = viewModelScope.launch {
+            repo.remoteUpdates.collect {
+                val beforeSig = lastSyncedDataSignature
+                refreshSharedData()
+                val afterSig = computeDomainSignature()
+                if (afterSig != beforeSig) {
+                    lastSyncedDataSignature = afterSig
+                    notifyAdminDataChanged()
                 }
             }
         }
@@ -345,7 +382,8 @@ class LocalHisabViewModel(
     }
 
     private fun pushCloudMutation(block: suspend CloudAutoSyncRepository.() -> Unit) {
-        val repo = cloudSyncRepository ?: return
+        val repo = activeCloudRepo ?: return
+        repo.refreshPendingState()
         if (!repo.isAutoSyncActive()) return
         viewModelScope.launch {
             repo.block()
@@ -353,7 +391,7 @@ class LocalHisabViewModel(
     }
 
     fun setCloudAutoSyncEnabled(enabled: Boolean) {
-        val repo = cloudSyncRepository ?: return
+        val repo = activeCloudRepo ?: return
         repo.setAutoSyncEnabled(enabled)
         showMessage(
             if (enabled) "Auto cloud sync enabled"
@@ -362,7 +400,7 @@ class LocalHisabViewModel(
     }
 
     fun syncCloudNow() {
-        val repo = cloudSyncRepository ?: return
+        val repo = activeCloudRepo ?: return
         viewModelScope.launch {
             val res = repo.syncAllNow()
             res.onSuccess {
@@ -558,6 +596,10 @@ class LocalHisabViewModel(
         }
     }
 
+    fun clearSaveError() {
+        _controls.update { it.copy(lastSaveError = null) }
+    }
+
     fun saveTransaction(
         editingId: String?,
         type: TxType,
@@ -569,10 +611,13 @@ class LocalHisabViewModel(
         onComplete: (Boolean) -> Unit
     ) {
         if (!isAdminSession && editingId != null) {
-            showMessage("Members are not allowed to edit transactions")
+            val msg = "Members are not allowed to edit transactions"
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
             onComplete(false)
             return
         }
+        _controls.update { it.copy(isSaving = true, lastSaveError = null) }
         val cleanCategory = category.trim()
         val cleanNote = note.trim().ifBlank { cleanCategory }
         val now = Timestamp.now()
@@ -619,7 +664,21 @@ class LocalHisabViewModel(
                 .thenByDescending { it.createdAt?.seconds ?: 0L }
         )
 
-        localStore.saveAll(updatedAll)
+        if (editingId != null && savedTx == null) {
+            val msg = "Transaction not found or could not be edited."
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
+            onComplete(false)
+            return
+        }
+
+        if (!localStore.saveAllVerified(updatedAll)) {
+            val msg = "Could not save transaction to device storage. Please try again."
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
+            onComplete(false)
+            return
+        }
         allTransactions = updatedAll
         _transactions.value = filterForOwner(updatedAll)
         savedTx?.let { tx ->
@@ -633,6 +692,8 @@ class LocalHisabViewModel(
         val submittedName = cleanNote.ifBlank { cleanCategory }.ifBlank { type.bnLabel }
         _controls.update {
             it.copy(
+                isSaving = false,
+                lastSaveError = null,
                 snackbarMessage = if (editingId == null) {
                     "$submittedName submitted successfully"
                 } else {
@@ -652,7 +713,10 @@ class LocalHisabViewModel(
         val isOwned = transaction.userId == DEFAULT_ADMIN_OWNER_ID || transaction.userId.isBlank()
         if (!isOwned) return
         val updatedAll = allTransactions.filterNot { it.id == transaction.id }
-        localStore.saveAll(updatedAll)
+        if (!localStore.saveAllVerified(updatedAll)) {
+            showMessage("Could not delete transaction from device storage.")
+            return
+        }
         allTransactions = updatedAll
         _transactions.value = filterForOwner(updatedAll)
         cloudSyncPrefs?.markPendingDelete(
@@ -1674,9 +1738,12 @@ class LocalHisabViewModel(
         onComplete: (Boolean) -> Unit
     ) {
         if (!isAdminSession) {
+            val msg = "Only Admin can manage members."
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
             onComplete(false)
             return
         }
+        _controls.update { it.copy(isSaving = true, lastSaveError = null) }
         val cleanName = name.trim().replace(Regex("\\s+"), " ")
         val cleanDesignation = designation.trim()
         val cleanPhone = phone.trim()
@@ -1687,12 +1754,16 @@ class LocalHisabViewModel(
         val cleanCode = code.trim().replace(Regex("\\s+"), " ")
         val cleanArea = area.trim()
         if (cleanCode.isEmpty()) {
-            showMessage("Please enter a member code")
+            val msg = "Please enter a member code"
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
             onComplete(false)
             return
         }
         if (cleanName.isEmpty()) {
-            showMessage("Please enter the member name")
+            val msg = "Please enter the member name"
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
             onComplete(false)
             return
         }
@@ -1704,7 +1775,9 @@ class LocalHisabViewModel(
                 other.code.trim().replace(Regex("\\s+"), " ").equals(cleanCode, ignoreCase = true)
         }
         if (conflictsAdmin || conflictsMember) {
-            showMessage("An account already exists with this Code (Login ID). Please use a different code.")
+            val msg = "An account already exists with this Code (Login ID). Please use a different code."
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
             onComplete(false)
             return
         }
@@ -1755,7 +1828,20 @@ class LocalHisabViewModel(
                 }
             }
         }
-        memberStore.saveAll(updated)
+        if (editingId != null && savedMember == null) {
+            val msg = "Member record not found."
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
+            onComplete(false)
+            return
+        }
+        if (!memberStore.saveAllVerified(updated)) {
+            val msg = "Could not save member to device storage. Please try again."
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
+            onComplete(false)
+            return
+        }
         _members.value = updated
         savedMember?.let { m ->
             cloudSyncPrefs?.markPendingUpsert(
@@ -1765,6 +1851,7 @@ class LocalHisabViewModel(
             pushCloudMutation { upsertMember(m) }
         }
         notifyAdminDataChanged()
+        _controls.update { it.copy(isSaving = false, lastSaveError = null) }
         showMessage(
             if (editingId == null) {
                 "$cleanName added successfully (Login ID & Password: $cleanCode)"
@@ -1785,7 +1872,11 @@ class LocalHisabViewModel(
                 member
             }
         }
-        memberStore.saveAll(updated)
+        if (target == null) return
+        if (!memberStore.saveAllVerified(updated)) {
+            showMessage("Could not update member status in device storage.")
+            return
+        }
         _members.value = updated
         target?.let { m ->
             cloudSyncPrefs?.markPendingUpsert(
@@ -1804,7 +1895,11 @@ class LocalHisabViewModel(
             showMessage("Please set the member Code before resetting the password")
             return
         }
-        val resetMember = memberStore.resetMemberPasswordToDefault(memberId) ?: return
+        val resetMember = memberStore.resetMemberPasswordToDefault(memberId)
+        if (resetMember == null) {
+            showMessage("Could not reset member password.")
+            return
+        }
         _members.value = _members.value.map { if (it.id == memberId) resetMember else it }
         cloudSyncPrefs?.markPendingUpsert(
             CloudAutoSyncRepository.COL_MEMBERS,
@@ -1818,7 +1913,10 @@ class LocalHisabViewModel(
     fun deleteMember(member: Member) {
         if (!isAdminSession) return
         val updated = _members.value.filterNot { it.id == member.id }
-        memberStore.saveAll(updated)
+        if (!memberStore.saveAllVerified(updated)) {
+            showMessage("Could not delete member from device storage.")
+            return
+        }
         _members.value = updated
         cloudSyncPrefs?.markPendingDelete(
             CloudAutoSyncRepository.COL_MEMBERS,
@@ -1832,7 +1930,10 @@ class LocalHisabViewModel(
     fun setOnlinePaymentEnabled(enabled: Boolean) {
         if (!isAdminSession) return
         val updated = _onlinePaymentConfig.value.copy(isOnlinePaymentEnabled = enabled)
-        onlinePaymentStore.save(updated)
+        if (!onlinePaymentStore.saveVerified(updated)) {
+            showMessage("Could not save payment settings.")
+            return
+        }
         _onlinePaymentConfig.value = updated
         cloudSyncPrefs?.markPendingUpsert(
             CloudAutoSyncRepository.COL_APP_CONFIG,
@@ -1849,7 +1950,10 @@ class LocalHisabViewModel(
             if (account.id == accountId) account.copy(isEnabled = enabled) else account
         }
         val updated = _onlinePaymentConfig.value.copy(accounts = updatedAccounts)
-        onlinePaymentStore.save(updated)
+        if (!onlinePaymentStore.saveVerified(updated)) {
+            showMessage("Could not update payment method.")
+            return
+        }
         _onlinePaymentConfig.value = updated
         cloudSyncPrefs?.markPendingUpsert(
             CloudAutoSyncRepository.COL_APP_CONFIG,
@@ -1878,7 +1982,10 @@ class LocalHisabViewModel(
             }
         }
         val updated = _onlinePaymentConfig.value.copy(accounts = updatedAccounts)
-        onlinePaymentStore.save(updated)
+        if (!onlinePaymentStore.saveVerified(updated)) {
+            showMessage("Could not save payment account to device storage.")
+            return
+        }
         _onlinePaymentConfig.value = updated
         cloudSyncPrefs?.markPendingUpsert(
             CloudAutoSyncRepository.COL_APP_CONFIG,
@@ -1898,6 +2005,12 @@ class LocalHisabViewModel(
         note: String,
         onComplete: (Boolean) -> Unit
     ) {
+        val targetAccount = when (channel) {
+            PaymentChannel.BKASH,
+            PaymentChannel.NAGAD,
+            PaymentChannel.ROCKET -> AccountType.MOBILE_BANK
+            PaymentChannel.BANK -> AccountType.BANK
+        }
         saveTransaction(
             editingId = null,
             type = type,
@@ -1905,7 +2018,7 @@ class LocalHisabViewModel(
             category = "Online Payment (${channel.title})",
             note = note.trim().ifBlank { "${channel.title} Payment" },
             date = BanglaFormatters.todayIso(),
-            account = AccountType.BANK,
+            account = targetAccount,
             onComplete = onComplete
         )
     }
@@ -1928,9 +2041,12 @@ class LocalHisabViewModel(
     ) {
         val store = takaJomaStore
         if (store == null) {
+            val msg = "Deposit storage is unavailable."
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
             onComplete(false)
             return
         }
+        _controls.update { it.copy(isSaving = true, lastSaveError = null) }
         val effectiveMemberId = if (isAdminSession) {
             memberId.ifBlank { "admin_manual" }
         } else {
@@ -1945,7 +2061,9 @@ class LocalHisabViewModel(
         val cleanBank = bankName.trim()
         val cleanPhotoPath = photoPath.trim()
         if (cleanName.isEmpty() || cleanCode.isEmpty() || cleanDepot.isEmpty() || amount <= 0.0) {
-            showMessage("Please fill in name, code, depot, and a valid amount")
+            val msg = "Please fill in name, code, depot, and a valid amount"
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
             onComplete(false)
             return
         }
@@ -2000,6 +2118,7 @@ class LocalHisabViewModel(
                     linkedTx?.let { upsertTransaction(it) }
                 }
                 notifyAdminDataChanged()
+                _controls.update { it.copy(isSaving = false, lastSaveError = null) }
                 val depositLabel = if (cleanBank.isNotBlank()) "$cleanName ($cleanBank)" else cleanName
                 showMessage(
                     if (isAdminSession) {
@@ -2011,7 +2130,9 @@ class LocalHisabViewModel(
                 onComplete(true)
             }
             .onFailure { err ->
-                showMessage(err.localizedMessage ?: "This slip has already been submitted. Duplicate slips are not allowed.")
+                val msg = err.localizedMessage ?: "This slip has already been submitted. Duplicate slips are not allowed."
+                _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+                showMessage(msg)
                 onComplete(false)
             }
     }
@@ -2103,7 +2224,7 @@ class LocalHisabViewModel(
     private fun upsertApprovedTakaJomaTransaction(
         entry: MemberTakaJoma,
         txDate: String
-    ): HisabTransaction {
+    ): HisabTransaction? {
         val txId = "${TAKA_JOMA_TX_PREFIX}${entry.id}"
         val cleanDate = txDate.trim().ifBlank { BanglaFormatters.todayIso() }
         val now = Timestamp.now()
@@ -2119,7 +2240,9 @@ class LocalHisabViewModel(
                 compareByDescending<HisabTransaction> { it.date }
                     .thenByDescending { it.createdAt?.seconds ?: 0L }
             )
-        localStore.saveAll(updatedAll)
+        if (!localStore.saveAllVerified(updatedAll)) {
+            return null
+        }
         allTransactions = updatedAll
         _transactions.value = filterForOwner(updatedAll)
         return linkedTx
@@ -2129,7 +2252,7 @@ class LocalHisabViewModel(
         val txId = "${TAKA_JOMA_TX_PREFIX}$submissionId"
         if (allTransactions.none { it.id == txId }) return
         val updatedAll = allTransactions.filterNot { it.id == txId }
-        localStore.saveAll(updatedAll)
+        if (!localStore.saveAllVerified(updatedAll)) return
         allTransactions = updatedAll
         _transactions.value = filterForOwner(updatedAll)
     }
@@ -2146,47 +2269,58 @@ class LocalHisabViewModel(
         }
         val store = monthlySalesStore
         if (store == null || records.isEmpty()) {
+            val msg = "No valid sales records to save."
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
             onComplete(false)
             return
         }
+        _controls.update { it.copy(isSaving = true, lastSaveError = null) }
         val removedIds = if (replaceMonth) {
             _monthlySales.value.filter { it.yearMonth == yearMonth }.map { it.id }
         } else {
             emptyList()
         }
-        val updated = store.uploadForMonth(
+        store.tryUploadForMonth(
             yearMonth = yearMonth,
             newRecords = records,
             replaceMonth = replaceMonth
-        )
-        _monthlySales.value = updated
-        val monthRecords = updated.filter { it.yearMonth == yearMonth }
-        removedIds.forEach {
-            cloudSyncPrefs?.markPendingDelete(
-                CloudAutoSyncRepository.COL_MONTHLY_SALES,
-                CloudAutoSyncRepository.sanitizeId(it)
-            )
-        }
-        monthRecords.forEach {
-            cloudSyncPrefs?.markPendingUpsert(
-                CloudAutoSyncRepository.COL_MONTHLY_SALES,
-                CloudAutoSyncRepository.sanitizeId(it.id)
-            )
-        }
-        pushCloudMutation {
-            removedIds.forEach { deleteMonthlySales(it) }
-            monthRecords.forEach { upsertMonthlySales(it) }
-        }
-        notifyAdminDataChanged()
-        val monthLabel = BanglaFormatters.formatBanglaMonth(yearMonth)
-        showMessage(
-            if (records.size == 1) {
-                "${records.first().name} ($monthLabel) sales submitted successfully"
-            } else {
-                "$monthLabel sales (${records.size} records) submitted successfully"
+        ).onSuccess { updated ->
+            _monthlySales.value = updated
+            val monthRecords = updated.filter { it.yearMonth == yearMonth }
+            removedIds.forEach {
+                cloudSyncPrefs?.markPendingDelete(
+                    CloudAutoSyncRepository.COL_MONTHLY_SALES,
+                    CloudAutoSyncRepository.sanitizeId(it)
+                )
             }
-        )
-        onComplete(true)
+            monthRecords.forEach {
+                cloudSyncPrefs?.markPendingUpsert(
+                    CloudAutoSyncRepository.COL_MONTHLY_SALES,
+                    CloudAutoSyncRepository.sanitizeId(it.id)
+                )
+            }
+            pushCloudMutation {
+                removedIds.forEach { deleteMonthlySales(it) }
+                monthRecords.forEach { upsertMonthlySales(it) }
+            }
+            notifyAdminDataChanged()
+            _controls.update { it.copy(isSaving = false, lastSaveError = null) }
+            val monthLabel = BanglaFormatters.formatBanglaMonth(yearMonth)
+            showMessage(
+                if (records.size == 1) {
+                    "${records.first().name} ($monthLabel) sales submitted successfully"
+                } else {
+                    "$monthLabel sales (${records.size} records) submitted successfully"
+                }
+            )
+            onComplete(true)
+        }.onFailure { err ->
+            val msg = err.localizedMessage ?: "Could not save monthly sales to device storage."
+            _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+            showMessage(msg)
+            onComplete(false)
+        }
     }
 
     fun saveMonthlySalesRecord(
@@ -2207,6 +2341,7 @@ class LocalHisabViewModel(
             onComplete(false)
             return
         }
+        _controls.update { it.copy(isSaving = true, lastSaveError = null) }
         val existing = editingId?.let { id -> _monthlySales.value.firstOrNull { it.id == id } }
         val record = MonthlySalesRecord(
             id = editingId ?: UUID.randomUUID().toString(),
@@ -2217,27 +2352,38 @@ class LocalHisabViewModel(
             tpPlusVat = tpPlusVat.coerceAtLeast(0.0),
             createdAtMs = existing?.createdAtMs ?: System.currentTimeMillis()
         )
-        _monthlySales.value = store.upsertRecord(record)
-        cloudSyncPrefs?.markPendingUpsert(
-            CloudAutoSyncRepository.COL_MONTHLY_SALES,
-            CloudAutoSyncRepository.sanitizeId(record.id)
-        )
-        pushCloudMutation { upsertMonthlySales(record) }
-        notifyAdminDataChanged()
-        showMessage(
-            if (editingId == null) {
-                "${record.name} sales submitted successfully"
-            } else {
-                "${record.name} sales updated successfully"
+        store.tryUpsertRecord(record)
+            .onSuccess { updated ->
+                _monthlySales.value = updated
+                cloudSyncPrefs?.markPendingUpsert(
+                    CloudAutoSyncRepository.COL_MONTHLY_SALES,
+                    CloudAutoSyncRepository.sanitizeId(record.id)
+                )
+                pushCloudMutation { upsertMonthlySales(record) }
+                notifyAdminDataChanged()
+                _controls.update { it.copy(isSaving = false, lastSaveError = null) }
+                showMessage(
+                    if (editingId == null) {
+                        "${record.name} sales submitted successfully"
+                    } else {
+                        "${record.name} sales updated successfully"
+                    }
+                )
+                onComplete(true)
             }
-        )
-        onComplete(true)
+            .onFailure { err ->
+                val msg = err.localizedMessage ?: "Could not save sales record to device storage."
+                _controls.update { it.copy(isSaving = false, lastSaveError = msg) }
+                showMessage(msg)
+                onComplete(false)
+            }
     }
 
     fun deleteMonthlySalesRecord(recordId: String) {
         if (!isAdminSession) return
         val store = monthlySalesStore ?: return
-        _monthlySales.value = store.deleteRecord(recordId)
+        val updated = store.deleteRecord(recordId)
+        _monthlySales.value = updated
         cloudSyncPrefs?.markPendingDelete(
             CloudAutoSyncRepository.COL_MONTHLY_SALES,
             CloudAutoSyncRepository.sanitizeId(recordId)
@@ -2956,6 +3102,8 @@ class LocalHisabViewModel(
     }
 
     override fun onCleared() {
+        syncStateCollectJob?.cancel()
+        remoteUpdatesCollectJob?.cancel()
         aiVoiceJob?.cancel()
         aiCallVoiceJob?.cancel()
         super.onCleared()

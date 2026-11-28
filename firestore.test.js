@@ -8,7 +8,7 @@ const fs = require("node:fs");
 
 let testEnv;
 const PROJECT_ID = process.env.GCP_PROJECT || "demo-no-project";
-const DATABASE_ID = "ai-studio-android-rafiqul-475a7f52-b8c2-42de-b632-57fc8b66bbcd";
+const DATABASE_ID = "ai-studio-android-netai-92aa74e2-c10a-482b-81c2-418438246a54";
 const ALICE_UID = "alice_123";
 const BOB_UID = "bob_456";
 const VALID_HASH = "pbkdf2_sha256$120000$YWJjZGVmZ2hpamtsbW5vcA==$MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=";
@@ -147,8 +147,21 @@ test("Transactions: owner CRUD with ownerScope succeeds; unauth, cross-user, fut
       category: "ব্যবসা",
       note: "বিক্রয় আয়",
       date: "2026-11-20",
-      account: "bank",
+      account: "mobile_bank",
       updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+
+  await assertSucceeds(
+    db.collection(`users/${ALICE_UID}/transactions`).doc("tx_1").update({
+      ownerScope: "member_m1",
+      type: "income",
+      amount: 1500.0,
+      category: "ব্যবসা",
+      note: "বিক্রয় আয়",
+      date: "2026-11-20",
+      account: "bank",
+      updatedAt: new Date(Date.now() - 500),
     })
   );
 

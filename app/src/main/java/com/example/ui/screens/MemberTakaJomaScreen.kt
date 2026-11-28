@@ -162,10 +162,13 @@ fun MemberTakaJomaScreen(
         onComplete: (Boolean) -> Unit
     ) -> Unit,
     onDeleteSubmission: (MemberTakaJoma) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSaving: Boolean = false,
+    externalSaveError: String? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val latestExternalSaveError by androidx.compose.runtime.rememberUpdatedState(externalSaveError)
 
     var pendingSubmissionId by remember { mutableStateOf(UUID.randomUUID().toString()) }
     var selectedMemberId by remember(currentMember?.id) {
@@ -1069,8 +1072,8 @@ fun MemberTakaJomaScreen(
 
                 // 3D Tactile Push Button
                 TakaJoma3DSubmitButton(
-                    text = if (isSubmitting) "Saving Deposit..." else "Save Deposit",
-                    enabled = !isSubmitting && !isProcessingPhoto,
+                    text = if (isSubmitting || isSaving) "Saving Deposit..." else "Save Deposit",
+                    enabled = !isSubmitting && !isSaving && !isProcessingPhoto,
                     onClick = {
                         val cleanName = name.trim()
                         val cleanCode = code.trim()
@@ -1144,7 +1147,8 @@ fun MemberTakaJomaScreen(
                                         }
                                         formError = null
                                     } else {
-                                        formError = "Could not save deposit. Please try again."
+                                        formError = latestExternalSaveError?.takeIf { it.isNotBlank() }
+                                            ?: "Could not save deposit. Please try again."
                                     }
                                 }
                             }

@@ -101,7 +101,9 @@ fun SalesUploadScreen(
     onDeleteRecord: (String) -> Unit,
     onClearMonth: (String) -> Unit,
     onShowMessage: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSaving: Boolean = false,
+    externalSaveError: String? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -366,6 +368,7 @@ fun SalesUploadScreen(
                             )
                         )
                     },
+                    enabled = !isSaving,
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = BrandHeroStart,
@@ -383,7 +386,10 @@ fun SalesUploadScreen(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Upload CSV / Excel (.xlsx)", fontWeight = FontWeight.Bold)
+                    Text(
+                        text = if (isSaving) "Saving..." else "Upload CSV / Excel (.xlsx)",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -510,10 +516,12 @@ fun SalesUploadScreen(
     if (showPasteDialog) {
         PasteSalesTableDialog(
             yearMonth = selectedMonth,
-            onDismiss = { showPasteDialog = false },
-            onImport = { parsedRecords ->
+            isSaving = isSaving,
+            externalSaveError = externalSaveError,
+            onDismiss = { if (!isSaving) showPasteDialog = false },
+            onImport = { parsedRecords, onFailure ->
                 onUploadMonthSales(selectedMonth, parsedRecords, replaceOnUpload) { ok ->
-                    if (ok) showPasteDialog = false
+                    if (ok) showPasteDialog = false else onFailure()
                 }
             }
         )
@@ -523,11 +531,15 @@ fun SalesUploadScreen(
         SalesRecordEditorDialog(
             editingRecord = editingRecord,
             members = members,
+            isSaving = isSaving,
+            externalSaveError = externalSaveError,
             onDismiss = {
-                showManualDialog = false
-                editingRecord = null
+                if (!isSaving) {
+                    showManualDialog = false
+                    editingRecord = null
+                }
             },
-            onSave = { code, name, tpSales, tpPlusVat ->
+            onSave = { code, name, tpSales, tpPlusVat, onFailure ->
                 onSaveSingleRecord(
                     selectedMonth,
                     editingRecord?.id,
@@ -539,6 +551,8 @@ fun SalesUploadScreen(
                     if (ok) {
                         showManualDialog = false
                         editingRecord = null
+                    } else {
+                        onFailure()
                     }
                 }
             }
@@ -632,14 +646,17 @@ fun SalesUploadScreen(
 @Composable
 private fun PasteSalesTableDialog(
     yearMonth: String,
+    isSaving: Boolean = false,
+    externalSaveError: String? = null,
     onDismiss: () -> Unit,
-    onImport: (List<MonthlySalesRecord>) -> Unit
+    onImport: (List<MonthlySalesRecord>, onFailure: () -> Unit) -> Unit
 ) {
     var rawText by remember { mutableStateOf("") }
     var errorText by remember { mutableStateOf<String?>(null) }
+    val latestExternalSaveError by androidx.compose.runtime.rememberUpdatedState(externalSaveError)
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         containerColor = CardSurfaceSolid,
         titleContentColor = GlassTextPrimary,
         textContentColor = GlassTextSecondary,
@@ -683,11 +700,15 @@ private fun PasteSalesTableDialog(
                 onClick = {
                     val result = SalesSheetParser.parseDelimitedText(rawText, yearMonth)
                     result.onSuccess { parsed ->
-                        onImport(parsed)
+                        onImport(parsed) {
+                            errorText = latestExternalSaveError?.takeIf { it.isNotBlank() }
+                                ?: "Could not save sales data. Please try again."
+                        }
                     }.onFailure { err ->
                         errorText = err.localizedMessage ?: "Please enter data in a valid format."
                     }
                 },
+                enabled = !isSaving,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = BrandHeroStart,
                     contentColor = Color.White
@@ -697,11 +718,11 @@ private fun PasteSalesTableDialog(
                     .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 12.dp)
                     .testTag("sales_paste_import_button")
             ) {
-                Text("Upload")
+                Text(if (isSaving) "Saving..." else "Upload")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
                 Text("Cancel")
             }
         }
@@ -712,8 +733,10 @@ private fun PasteSalesTableDialog(
 private fun SalesRecordEditorDialog(
     editingRecord: MonthlySalesRecord?,
     members: List<Member>,
+    isSaving: Boolean = false,
+    externalSaveError: String? = null,
     onDismiss: () -> Unit,
-    onSave: (code: String, name: String, tpSales: Double, tpPlusVat: Double) -> Unit
+    onSave: (code: String, name: String, tpSales: Double, tpPlusVat: Double, onFailure: () -> Unit) -> Unit
 ) {
     var code by remember(editingRecord) { mutableStateOf(editingRecord?.code ?: "") }
     var name by remember(editingRecord) { mutableStateOf(editingRecord?.name ?: "") }
@@ -724,9 +747,10 @@ private fun SalesRecordEditorDialog(
         mutableStateOf(editingRecord?.let { formatEditableAmount(it.tpPlusVat) } ?: "")
     }
     var errorText by remember { mutableStateOf<String?>(null) }
+    val latestExternalSaveError by androidx.compose.runtime.rememberUpdatedState(externalSaveError)
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         containerColor = CardSurfaceSolid,
         titleContentColor = GlassTextPrimary,
         textContentColor = GlassTextSecondary,
@@ -862,8 +886,12 @@ private fun SalesRecordEditorDialog(
                         errorText = "Please enter valid TP sales and TP+VAT sales amounts."
                         return@Button
                     }
-                    onSave(cleanCode, cleanName.ifBlank { cleanCode }, tpSales, tpVat)
+                    onSave(cleanCode, cleanName.ifBlank { cleanCode }, tpSales, tpVat) {
+                        errorText = latestExternalSaveError?.takeIf { it.isNotBlank() }
+                            ?: "Could not save sales record. Please try again."
+                    }
                 },
+                enabled = !isSaving,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = BrandHeroStart,
                     contentColor = Color.White
@@ -873,11 +901,11 @@ private fun SalesRecordEditorDialog(
                     .hisab3DButtonSurface(accentColor = BrandHeroStart, cornerRadius = 12.dp)
                     .testTag("sales_manual_save_button")
             ) {
-                Text("Save")
+                Text(if (isSaving) "Saving..." else "Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
                 Text("Cancel")
             }
         }

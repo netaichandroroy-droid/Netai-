@@ -128,11 +128,14 @@ class CloudSyncPrefsStore(context: Context) {
     }
 
     fun hasPendingMutations(): Boolean {
+        return getPendingMutationCount() > 0
+    }
+
+    fun getPendingMutationCount(): Int {
         synchronized(pendingLock) {
-            val upserts = readMapLocked(KEY_PENDING_UPSERTS)
-            if (upserts.values.any { it.isNotEmpty() }) return true
-            val deletes = readMapLocked(KEY_PENDING_DELETES)
-            return deletes.values.any { it.isNotEmpty() }
+            val upserts = readMapLocked(KEY_PENDING_UPSERTS).values.sumOf { it.size }
+            val deletes = readMapLocked(KEY_PENDING_DELETES).values.sumOf { it.size }
+            return upserts + deletes
         }
     }
 

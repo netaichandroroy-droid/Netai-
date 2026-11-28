@@ -20,6 +20,12 @@ class LocalTransactionStore(context: Context) {
     )
 
     fun loadAll(): List<HisabTransaction> {
+        synchronized(storeLock) {
+            return loadAllLocked()
+        }
+    }
+
+    private fun loadAllLocked(): List<HisabTransaction> {
         val rawFromPrefs = if (prefs.contains(KEY_TRANSACTIONS)) prefs.getString(KEY_TRANSACTIONS, null) else null
         val parsedFromPrefs = rawFromPrefs?.let { parseTransactionsJson(it) }
         if (parsedFromPrefs != null) {
@@ -43,62 +49,105 @@ class LocalTransactionStore(context: Context) {
             for (i in 0 until array.length()) {
                 val obj = array.optJSONObject(i) ?: continue
                 val id = obj.optString("id", "").ifBlank { UUID.randomUUID().toString() }
+                val ownerScope = obj.optString("userId", "").trim().ifBlank { LOCAL_USER_ID }
                 val type = TxType.fromRaw(obj.optString("type", "expense")).wireValue
                 val amount = obj.optDouble("amount", 0.0)
-                if (amount <= 0.0) continue
+                if (amount.isNaN() || amount <= 0.0) continue
                 val category = obj.optString("category", "")
                 val note = obj.optString("note", "")
                 val date = obj.optString("date", "")
                 val account = AccountType.fromRaw(obj.optString("account", "cash")).wireValue
                 val createdAtMs = obj.optLong("createdAtMs", System.currentTimeMillis())
+                val updatedAtMs = obj.optLong("updatedAtMs", createdAtMs)
                 list.add(
                     HisabTransaction(
                         id = id,
-                        userId = LOCAL_USER_ID,
+                        userId = ownerScope,
                         type = type,
                         amount = amount,
                         category = category,
                         note = note,
                         date = date,
                         account = account,
-                        createdAt = Timestamp(createdAtMs / 1000, ((createdAtMs % 1000) * 1_000_000).toInt())
+                        createdAt = msToTimestamp(createdAtMs),
+                        updatedAt = msToTimestamp(updatedAtMs)
                     )
                 )
             }
-            list.sortedWith(
-                compareByDescending<HisabTransaction> { it.date }
-                    .thenByDescending { it.createdAt?.seconds ?: 0L }
-            )
+            sortTransactions(list)
         }.getOrNull()
     }
 
+    private fun msToTimestamp(ms: Long): Timestamp {
+        val safeMs = ms.coerceAtLeast(0L)
+        return Timestamp(safeMs / 1000L, ((safeMs % 1000L) * 1_000_000L).toInt())
+    }
+
+    private fun sortTransactions(list: List<HisabTransaction>): List<HisabTransaction> {
+        return list.sortedWith(
+            compareByDescending<HisabTransaction> { it.date }
+                .thenByDescending { it.createdAt?.seconds ?: 0L }
+                .thenByDescending { it.createdAt?.nanoseconds ?: 0 }
+        )
+    }
+
     fun saveAll(items: List<HisabTransaction>) {
+        saveAllVerified(items)
+    }
+
+    fun saveAllVerified(items: List<HisabTransaction>): Boolean {
+        synchronized(storeLock) {
+            return saveAllLocked(items)
+        }
+    }
+
+    fun updateAtomic(
+        transform: (List<HisabTransaction>) -> List<HisabTransaction>
+    ): Result<List<HisabTransaction>> {
+        synchronized(storeLock) {
+            val current = loadAllLocked()
+            val updated = sortTransactions(transform(current))
+            return if (saveAllLocked(updated)) {
+                Result.success(updated)
+            } else {
+                Result.failure(IllegalStateException("Could not write transaction data to device storage."))
+            }
+        }
+    }
+
+    private fun saveAllLocked(items: List<HisabTransaction>): Boolean {
+        val sorted = sortTransactions(items)
         val array = JSONArray()
-        for (t in items) {
+        for (t in sorted) {
+            val createdMs = t.createdAt?.toDate()?.time ?: System.currentTimeMillis()
+            val updatedMs = t.updatedAt?.toDate()?.time ?: createdMs
             val obj = JSONObject().apply {
                 put("id", t.id)
+                put("userId", t.userId.ifBlank { LOCAL_USER_ID })
                 put("type", t.type)
                 put("amount", t.amount)
                 put("category", t.category)
                 put("note", t.note)
                 put("date", t.date)
                 put("account", t.account)
-                put("createdAtMs", t.createdAt?.toDate()?.time ?: System.currentTimeMillis())
+                put("createdAtMs", createdMs)
+                put("updatedAtMs", updatedMs)
             }
             array.put(obj)
         }
         val json = array.toString()
-        prefs.edit(commit = true) {
-            putString(KEY_TRANSACTIONS, json)
-        }
-        DurableLocalVault.putSection(appContext, VAULT_SECTION, json)
+        val prefsOk = prefs.edit().putString(KEY_TRANSACTIONS, json).commit()
+        val vaultOk = DurableLocalVault.putSection(appContext, VAULT_SECTION, json)
+        return prefsOk || vaultOk
     }
 
     fun clearAll() {
-        prefs.edit(commit = true) {
-            remove(KEY_TRANSACTIONS)
+        synchronized(storeLock) {
+            prefs.edit(commit = true) {
+                remove(KEY_TRANSACTIONS)
+            }
+            DurableLocalVault.removeSection(appContext, VAULT_SECTION)
         }
-        DurableLocalVault.removeSection(appContext, VAULT_SECTION)
     }
 
     fun toImportedList(): List<ImportedTransaction> {
@@ -115,6 +164,7 @@ class LocalTransactionStore(context: Context) {
     }
 
     companion object {
+        private val storeLock = Any()
         private const val PREFS_NAME = "hisab_local_transactions_prefs"
         private const val KEY_TRANSACTIONS = "transactions_json"
         private const val VAULT_SECTION = "transactions_json"

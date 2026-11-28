@@ -132,7 +132,9 @@ fun MemberListScreen(
     onToggleActive: (memberId: String, isActive: Boolean) -> Unit,
     onDeleteMember: (Member) -> Unit,
     onResetPassword: ((Member) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSaving: Boolean = false,
+    externalSaveError: String? = null
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
 
@@ -453,7 +455,9 @@ fun MemberListScreen(
     if (showEditorSheet) {
         MemberEditorModalSheet(
             editingMember = editingMember,
-            onDismiss = { showEditorSheet = false },
+            isSaving = isSaving,
+            externalSaveError = externalSaveError,
+            onDismiss = { if (!isSaving) showEditorSheet = false },
             onResetPassword = onResetPassword,
             onSave = { editingId, code, name, designation, area, phone, depot, isActive, email, address, joiningDate ->
                 onSaveMember(
@@ -850,6 +854,8 @@ private fun ProfileSheetFieldRow(label: String, value: String) {
 @Composable
 internal fun MemberEditorModalSheet(
     editingMember: Member?,
+    isSaving: Boolean = false,
+    externalSaveError: String? = null,
     onDismiss: () -> Unit,
     onResetPassword: ((Member) -> Unit)? = null,
     onSave: (
@@ -880,9 +886,10 @@ internal fun MemberEditorModalSheet(
     }
     var isActive by remember(editingMember) { mutableStateOf(editingMember?.isActive ?: true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var didAttemptSave by remember(editingMember) { mutableStateOf(false) }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         sheetState = sheetState,
         containerColor = CardSurfaceSolid,
         contentColor = GlassTextPrimary
@@ -954,6 +961,7 @@ internal fun MemberEditorModalSheet(
                                 onValueChange = {
                                     code = it
                                     errorMessage = null
+                                    didAttemptSave = false
                                 },
                                 label = { Text("Code (Login ID & Default Password)") },
                                 singleLine = true,
@@ -971,6 +979,7 @@ internal fun MemberEditorModalSheet(
                                 onValueChange = {
                                     name = it
                                     errorMessage = null
+                                    didAttemptSave = false
                                 },
                                 label = { Text("Name") },
                                 singleLine = true,
@@ -1218,14 +1227,15 @@ internal fun MemberEditorModalSheet(
                         }
                     }
 
-                    if (!errorMessage.isNullOrBlank()) {
+                    val displayedError = errorMessage ?: if (didAttemptSave) externalSaveError else null
+                    if (!displayedError.isNullOrBlank()) {
                         GlossyInnerMetricTile(
                             accentColor = ExpenseCrimson,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = errorMessage ?: "",
+                                text = displayedError,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = ExpenseCrimson,
                                 fontWeight = FontWeight.Medium,
@@ -1266,6 +1276,7 @@ internal fun MemberEditorModalSheet(
                                     errorMessage = "Please enter member name."
                                     return@Button
                                 }
+                                didAttemptSave = true
                                 onSave(
                                     editingMember?.id,
                                     code,
@@ -1280,6 +1291,7 @@ internal fun MemberEditorModalSheet(
                                     joiningDate
                                 )
                             },
+                            enabled = !isSaving,
                             interactionSource = saveInteraction,
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -1300,7 +1312,11 @@ internal fun MemberEditorModalSheet(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (editingMember == null) "Save Member" else "Update Member",
+                                text = when {
+                                    isSaving -> "Saving..."
+                                    editingMember == null -> "Save Member"
+                                    else -> "Update Member"
+                                },
                                 fontWeight = FontWeight.Bold
                             )
                         }

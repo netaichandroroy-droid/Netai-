@@ -83,8 +83,8 @@
         },
         "account": {
           "type": "string",
-          "enum": ["cash", "bank"],
-          "description": "Account used: cash or bank."
+          "enum": ["cash", "mobile_bank", "bank"],
+          "description": "Account used: cash, mobile_bank, or bank."
         },
         "createdAt": {
           "type": "string",

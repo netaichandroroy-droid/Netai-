@@ -201,7 +201,7 @@ fun HisabMainApp(
     val cloudSyncPrefs = remember(context) { CloudSyncPrefsStore(context) }
     val aiCallCenterPrefs = remember(context) { AiCallCenterPrefsStore(context) }
     val viewModel: LocalHisabViewModel = viewModel(
-        key = "local_hisab_$syncOwnerUid",
+        key = "local_hisab_admin",
         factory = viewModelFactory {
             initializer {
                 LocalHisabViewModel(
@@ -220,6 +220,9 @@ fun HisabMainApp(
             }
         }
     )
+    LaunchedEffect(cloudSyncRepository) {
+        viewModel.attachCloudSyncRepository(cloudSyncRepository)
+    }
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val members by viewModel.members.collectAsStateWithLifecycle()
     val onlinePaymentConfig by viewModel.onlinePaymentConfig.collectAsStateWithLifecycle()
@@ -1353,7 +1356,9 @@ fun HisabMainApp(
                                 onSaveMember = viewModel::saveMember,
                                 onToggleActive = viewModel::toggleMemberActive,
                                 onDeleteMember = viewModel::deleteMember,
-                                onResetPassword = { member -> viewModel.resetMemberPassword(member.id) }
+                                onResetPassword = { member -> viewModel.resetMemberPassword(member.id) },
+                                isSaving = controls.isSaving,
+                                externalSaveError = controls.lastSaveError
                             )
 
                             SettingsSubPage.ONLINE_PAYMENT -> OnlinePaymentScreen(
@@ -1362,7 +1367,9 @@ fun HisabMainApp(
                                 onToggleAccountEnabled = viewModel::togglePaymentAccountEnabled,
                                 onUpdateAccount = viewModel::updatePaymentAccount,
                                 onRecordPaymentTransaction = viewModel::recordOnlinePaymentTransaction,
-                                onShowMessage = viewModel::showMessage
+                                onShowMessage = viewModel::showMessage,
+                                isSaving = controls.isSaving,
+                                externalSaveError = controls.lastSaveError
                             )
 
                             SettingsSubPage.MEMBER_TAKA_JOMA -> MemberTakaJomaScreen(
@@ -1370,7 +1377,9 @@ fun HisabMainApp(
                                 adminMembers = members,
                                 isAdminMode = true,
                                 onSubmit = viewModel::submitMemberTakaJoma,
-                                onDeleteSubmission = viewModel::deleteMemberTakaJoma
+                                onDeleteSubmission = viewModel::deleteMemberTakaJoma,
+                                isSaving = controls.isSaving,
+                                externalSaveError = controls.lastSaveError
                             )
 
                             SettingsSubPage.SALES_UPLOAD -> SalesUploadScreen(
@@ -1382,7 +1391,9 @@ fun HisabMainApp(
                                 onSaveSingleRecord = viewModel::saveMonthlySalesRecord,
                                 onDeleteRecord = viewModel::deleteMonthlySalesRecord,
                                 onClearMonth = viewModel::clearMonthlySales,
-                                onShowMessage = viewModel::showMessage
+                                onShowMessage = viewModel::showMessage,
+                                isSaving = controls.isSaving,
+                                externalSaveError = controls.lastSaveError
                             )
 
                             SettingsSubPage.AI_CALL_CENTER -> AiCallCenterScreen(
@@ -1425,7 +1436,8 @@ fun HisabMainApp(
             editingTransaction = editingTransaction,
             initialType = modalInitialType,
             isSaving = controls.isSaving,
-            onDismiss = { showModal = false },
+            externalSaveError = controls.lastSaveError,
+            onDismiss = { if (!controls.isSaving) showModal = false },
             onSave = { editingId, type, amount, category, note, date, account ->
                 viewModel.saveTransaction(editingId, type, amount, category, note, date, account) { ok ->
                     if (ok) showModal = false
@@ -1457,7 +1469,9 @@ fun HisabMainApp(
     if (showQuickAddMemberSheet) {
         MemberEditorModalSheet(
             editingMember = null,
-            onDismiss = { showQuickAddMemberSheet = false },
+            isSaving = controls.isSaving,
+            externalSaveError = controls.lastSaveError,
+            onDismiss = { if (!controls.isSaving) showQuickAddMemberSheet = false },
             onSave = { editingId, code, name, designation, area, phone, depot, isActive, email, address, joiningDate ->
                 viewModel.saveMember(
                     editingId = editingId,

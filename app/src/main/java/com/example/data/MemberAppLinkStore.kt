@@ -16,20 +16,22 @@ class MemberAppLinkStore(context: Context) {
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     fun getDownloadUrl(): String {
-        val fromPrefs = if (prefs.contains(KEY_DOWNLOAD_URL)) {
-            prefs.getString(KEY_DOWNLOAD_URL, "")?.trim().orEmpty()
-        } else {
-            ""
-        }
-        if (fromPrefs.isNotEmpty()) return fromPrefs
-        if (!prefs.contains(KEY_DOWNLOAD_URL)) {
-            val fromVault = DurableLocalVault.getSection(appContext, VAULT_SECTION)?.trim().orEmpty()
-            if (fromVault.isNotEmpty()) {
-                prefs.edit(commit = true) { putString(KEY_DOWNLOAD_URL, fromVault) }
-                return fromVault
+        synchronized(storeLock) {
+            val fromPrefs = if (prefs.contains(KEY_DOWNLOAD_URL)) {
+                prefs.getString(KEY_DOWNLOAD_URL, "")?.trim().orEmpty()
+            } else {
+                ""
             }
+            if (fromPrefs.isNotEmpty()) return fromPrefs
+            if (!prefs.contains(KEY_DOWNLOAD_URL)) {
+                val fromVault = DurableLocalVault.getSection(appContext, VAULT_SECTION)?.trim().orEmpty()
+                if (fromVault.isNotEmpty()) {
+                    prefs.edit(commit = true) { putString(KEY_DOWNLOAD_URL, fromVault) }
+                    return fromVault
+                }
+            }
+            return ""
         }
-        return ""
     }
 
     fun getEffectiveMemberLink(): String {
@@ -48,32 +50,39 @@ class MemberAppLinkStore(context: Context) {
 
     fun saveDownloadUrl(rawUrl: String): Result<String> {
         val cleaned = rawUrl.trim()
-        if (cleaned.isEmpty()) {
-            prefs.edit(commit = true) { remove(KEY_DOWNLOAD_URL) }
-            DurableLocalVault.removeSection(appContext, VAULT_SECTION)
-            return Result.success("")
+        synchronized(storeLock) {
+            if (cleaned.isEmpty()) {
+                val prefsOk = prefs.edit().remove(KEY_DOWNLOAD_URL).commit()
+                val vaultOk = DurableLocalVault.removeSection(appContext, VAULT_SECTION)
+                return if (prefsOk || vaultOk) {
+                    Result.success("")
+                } else {
+                    Result.failure(IllegalStateException("Could not update download link in storage."))
+                }
+            }
+            if (cleaned.any { it.isWhitespace() }) {
+                return Result.failure(
+                    IllegalArgumentException("Please enter a valid http:// or https:// download link.")
+                )
+            }
+            val hasExplicitScheme = HAS_SCHEME_REGEX.matches(cleaned) && !HOST_PORT_REGEX.matches(cleaned)
+            val normalized = if (!hasExplicitScheme) {
+                "https://$cleaned"
+            } else {
+                cleaned
+            }
+            if (!isValidHttpUrl(normalized)) {
+                return Result.failure(
+                    IllegalArgumentException("Please enter a valid http:// or https:// download link.")
+                )
+            }
+            val prefsOk = prefs.edit().putString(KEY_DOWNLOAD_URL, normalized).commit()
+            val vaultOk = DurableLocalVault.putSection(appContext, VAULT_SECTION, normalized)
+            if (!prefsOk && !vaultOk) {
+                return Result.failure(IllegalStateException("Could not save download link to storage."))
+            }
+            return Result.success(normalized)
         }
-        if (cleaned.any { it.isWhitespace() }) {
-            return Result.failure(
-                IllegalArgumentException("Please enter a valid http:// or https:// download link.")
-            )
-        }
-        val hasExplicitScheme = HAS_SCHEME_REGEX.matches(cleaned) && !HOST_PORT_REGEX.matches(cleaned)
-        val normalized = if (!hasExplicitScheme) {
-            "https://$cleaned"
-        } else {
-            cleaned
-        }
-        if (!isValidHttpUrl(normalized)) {
-            return Result.failure(
-                IllegalArgumentException("Please enter a valid http:// or https:// download link.")
-            )
-        }
-        prefs.edit(commit = true) {
-            putString(KEY_DOWNLOAD_URL, normalized)
-        }
-        DurableLocalVault.putSection(appContext, VAULT_SECTION, normalized)
-        return Result.success(normalized)
     }
 
     fun prepareApkShareUri(): Uri? {
@@ -105,6 +114,7 @@ class MemberAppLinkStore(context: Context) {
     }
 
     companion object {
+        private val storeLock = Any()
         const val DEFAULT_MEMBER_APP_URL = "https://ais-pre-ki27a5iyxvtqdalsscbv2a-223515846545.asia-east1.run.app"
         private const val PREFS_NAME = "hisab_member_app_link_prefs"
         private const val KEY_DOWNLOAD_URL = "member_app_download_url"

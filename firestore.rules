@@ -54,7 +54,7 @@ service cloud.firestore {
              data.category is string && data.category.size() >= 1 && data.category.size() <= 60 &&
              data.note is string && data.note.size() <= 200 &&
              data.date is string && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
-             data.account in ['cash', 'bank'];
+             data.account in ['cash', 'mobile_bank', 'bank'];
     }
 
     function isValidMember(data) {
